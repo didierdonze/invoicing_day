@@ -30,6 +30,7 @@ class FieldAllowListTest(unittest.TestCase):
         fields = fetch.SO_FIELDS + fetch.LINE_FIELDS + fetch.MOVE_FIELDS + fetch.MOVE_LINE_FIELDS + fetch.UOM_FIELDS
         for f in fields:
             self.assertFalse(re.match(r"(price|amount|employee|user_id)", f), f)
+        self.assertIn("is_expense", fetch.LINE_FIELDS)        # expense lines are filtered out (employee names)
         src = Path(fetch.__file__).read_text(encoding="utf-8")
         self.assertNotIn('"employee_id"', src)
         self.assertNotIn('"price_unit"', src)
