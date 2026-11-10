@@ -30,6 +30,14 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(activity_assignees(acts), ["Admin One", "PM Two", "unassigned"])
         self.assertEqual(activity_assignees([]), [])
 
+    def test_d04_cards_grouped_biggest_first(self):
+        from invoicing_day.invoicing import d04_cards
+        lines = [{"jira": "A-1", "hours": 0.5}, {"jira": "A-2", "hours": 2.0}, {"jira": "A-1", "hours": 0.25},
+                 {"jira": None, "hours": 0.1}]
+        self.assertEqual(d04_cards(lines), [{"key": "A-2", "lines": 1, "hours": 2.0},
+                                            {"key": "A-1", "lines": 2, "hours": 0.75},
+                                            {"key": None, "lines": 1, "hours": 0.1}])
+
     def test_month_bounds(self):
         self.assertEqual(month_bounds("2026-10"), (date(2026, 10, 1), date(2026, 10, 31)))
         self.assertEqual(month_bounds("2026-12"), (date(2026, 12, 1), date(2026, 12, 31)))

@@ -60,6 +60,17 @@ def activity_assignees(activities):
     return sorted({_name(a.get("user_id")) or "unassigned" for a in activities})
 
 
+def d04_cards(lines):
+    """Dashboard 04 lines grouped by Jira card (None = no card): what to fix, biggest first."""
+    by = defaultdict(lambda: {"lines": 0, "hours": 0.0})
+    for l in lines:
+        d = by[l.get("jira")]
+        d["lines"] += 1
+        d["hours"] += l.get("hours") or 0.0
+    return sorted(({"key": k, "lines": v["lines"], "hours": r2(v["hours"])} for k, v in by.items()),
+                  key=lambda c: (-c["hours"], c["key"] or ""))
+
+
 def r2(x):
     return None if x is None else round(float(x) + 0.0, 2)
 
@@ -286,6 +297,7 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
             jira_state["reason"] = "no Jira configuration (~/.config/invoicing_day/jira.env)"
         else:
             jira_state["available"] = True
+            jira_state["url"] = jira.url
     else:
         jira_state["reason"] = "disabled (--no-jira)"
     if not jira_state["available"]:
@@ -611,7 +623,7 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
         "controls": {
             "d02_not_in_jira": not_in_jira, "d03_tasks_no_so": d03[:rules.DETAIL_LIMIT], "d03_count": len(d03),
             "d04_ts_no_task": d04[:rules.DETAIL_LIMIT], "d04_count": len(d04),
-            "d04_hours": r2(sum(l["hours"] or 0 for l in d04)),
+            "d04_hours": r2(sum(l["hours"] or 0 for l in d04)), "d04_cards": d04_cards(d04)[:rules.DETAIL_LIMIT],
             "check_epic": None if check_epic is None and not jira_state["available"] else (check_epic or []),
             "no_so_item": {k: r2(v) for k, v in no_so.items()},
             "item_category": cat_list[:rules.DETAIL_LIMIT],

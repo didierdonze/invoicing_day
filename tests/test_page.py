@@ -59,6 +59,25 @@ class PageTest(unittest.TestCase):
         self.assertIn("✅ 7 Admin notified → Admin One", body)          # any activity counts (Didier 2026-11-10)
         self.assertIn("activity → Admin One", body)
 
+    def test_step1_unticked_links_what_to_correct(self):
+        fig = figures(jira={"available": True, "reason": None, "url": "https://jira.example"})
+        beta = fig["rows"][0]
+        beta["progress"] = {**beta["progress"], "step1_clean": False}
+        beta["controls"] = {**beta["controls"], "d04_cards": [{"key": "BET-1", "lines": 3, "hours": 1.5}],
+                            "check_epic": [{"key": f"BET-{n}", "summary": "s", "hours": 1.0,
+                                            "link": f"https://jira.example/browse/BET-{n}"} for n in range(10, 15)],
+                            "d03_count": 1, "d03_tasks_no_so": [{"id": 7, "name": "Task without SO item",
+                                                                "link": "https://odoo.example/t7"}]}
+        body = build_body(fig)
+        self.assertIn("⬜ 1 Data clean</p>", body)                       # hints right under the step (Didier 2026-11-10)
+        self.assertIn('↳ Jira, add an Epic: <a href="https://jira.example/browse/BET-10">BET-10</a>', body)
+        self.assertIn("issues/?jql=key%20in%20%28BET-10%2C%20BET-11", body)   # the rest in one Jira search
+        self.assertIn('<a href="https://jira.example/browse/BET-1">BET-1</a> (3)', body)
+        self.assertIn('href="https://odoo.example/web#action=4418">dashboard 04</a>', body)
+        self.assertIn('<a href="https://odoo.example/t7">Task without SO item</a>', body)
+        alpha = body[body.index("<strong>alpha_odoo</strong>"):]
+        self.assertNotIn("↳", alpha[:alpha.index("</tr>")])            # ticked → no hint
+
     def test_no_storage_xml(self):
         body = build_body(figures())
         self.assertNotIn("<ac:", body)                                  # format guide: never storage XML
