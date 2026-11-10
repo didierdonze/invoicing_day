@@ -2,6 +2,8 @@
 
 Généré entièrement par `invoicing_day/page.py` depuis `figures.json` (format HTML du connecteur Atlassian :
 panels, status lozenges, `<details>`, `data-background` sur les cellules). Rien n'est ajouté à la main.
+La page est une **live doc** Confluence (`subtype: "live"`) depuis octobre 2026 : l'équipe écrit directement
+dans la colonne Comments, sans publier.
 
 1. **Panel info** : mois facturé, nombre de projets actifs, date et heure de lecture d'Odoo, lien vers le How-to.
 2. **Panel warning** « Not checked in this run » si un contrôle a été sauté (Jira sans token, dashboard illisible).
@@ -18,7 +20,9 @@ panels, status lozenges, `<details>`, `data-background` sur les cellules). Rien 
    Unpaid & late | **Comments (de Didier, recopiés tels quels)**.
    Les projets « idle » (rien à facturer, rien à corriger) tiennent en une ligne sous le tableau.
 7. **Details per project** : panel « How to fix » une fois, puis un `<details>` par projet ayant un signal :
-   messages, exemples (5 au plus) et lien vers le dashboard Odoo concerné, factures du cycle.
+   messages, exemples (5 au plus) et lien vers le dashboard Odoo concerné, factures du cycle. Infos affichées :
+   `STALE_TO_INVOICE`, `ODOO_ONLY`, `JIRA_NO_EPIC_PLACED`, `LOCKED_SO_HOURS` (heures du mois sur une commande
+   verrouillée, hors proposition).
 
 ## Statuts
 
