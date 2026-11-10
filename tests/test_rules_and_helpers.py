@@ -22,6 +22,14 @@ class RulesTest(unittest.TestCase):
 
 
 class HelpersTest(unittest.TestCase):
+    def test_activity_assignees_any_type(self):
+        from invoicing_day.invoicing import activity_assignees
+        acts = [{"activity_type_id": [5, "Validate/Send Invoice"], "user_id": [272, "Admin One"]},
+                {"activity_type_id": [1, "Email"], "user_id": [7, "PM Two"]},
+                {"activity_type_id": [4, "To Do"], "user_id": False}]
+        self.assertEqual(activity_assignees(acts), ["Admin One", "PM Two", "unassigned"])
+        self.assertEqual(activity_assignees([]), [])
+
     def test_month_bounds(self):
         self.assertEqual(month_bounds("2026-10"), (date(2026, 10, 1), date(2026, 10, 31)))
         self.assertEqual(month_bounds("2026-12"), (date(2026, 12, 1), date(2026, 12, 31)))

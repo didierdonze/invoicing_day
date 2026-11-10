@@ -55,6 +55,11 @@ def _name(v):
     return _u(v[1]) if isinstance(v, (list, tuple)) and len(v) > 1 else None
 
 
+def activity_assignees(activities):
+    """Step 7: any open activity on the invoice counts, whatever its type; returns who it is assigned to."""
+    return sorted({_name(a.get("user_id")) or "unassigned" for a in activities})
+
+
 def r2(x):
     return None if x is None else round(float(x) + 0.0, 2)
 
@@ -574,13 +579,12 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
         name = m["name"] if m.get("name") not in ("/", False, None) else f"draft #{m['id']}"
         pdfs = [a for a in atts.get(m["id"], []) if (a.get("mimetype") or "") == "application/pdf"]
         report = [a for a in pdfs if rules.REPORT_ATTACHMENT.search(a.get("name") or "")]
-        leila = [a for a in acts.get(m["id"], []) if _id(a.get("activity_type_id")) == rules.ADMIN_ACTIVITY_TYPE_ID
-                 and _id(a.get("user_id")) == rules.ADMIN_USER_ID]
+        assignees = activity_assignees(acts.get(m["id"], []))
         prog.append({"id": m["id"], "name": name, "kind": m["move_type"], "state": m["state"],
                      "invoice_date": m.get("invoice_date") or None, "accounting_date": m.get("date") or None,
                      "ref": m.get("ref") or None, "amount_untaxed": r2(m.get("amount_untaxed")),
                      "currency": _name(m.get("currency_id")) or "CHF",
-                     "report_attached": bool(report), "admin_activity": bool(leila),
+                     "report_attached": bool(report), "admin_activity": bool(assignees), "activity_to": assignees,
                      "link": client.link("account.move", m["id"])})
     step1 = not any(f["code"] in ("D03_TASK_NO_SO", "D04_TS_NO_TASK", "JIRA_NO_EPIC") for f in flags)
     step23 = not any(f["code"] in ("TS_NO_SO_ITEM", "ITEM_CATEGORY", "HOURS_NOT_INVOICEABLE") for f in flags)

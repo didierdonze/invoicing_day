@@ -29,10 +29,6 @@ DASHBOARD_ACTIONS = {
 }
 CRM_ACTIONS = {"leads": 4100, "opportunities": 4101}    # 01 - My leads / My opportunities to clean
 
-# ---------------------------------------------------------------- Step 7: notify the admin team
-ADMIN_USER_ID = _env_int("ADMIN_USER_ID", 272)          # Muminovic Leila
-ADMIN_ACTIVITY_TYPE_ID = _env_int("ADMIN_ACTIVITY_TYPE_ID", 5)   # "Validate/Send Invoice"
-
 # ---------------------------------------------------------------- Step 6: hours report attached
 REPORT_ATTACHMENT = re.compile(r"rapport|heures|stunden|hours|timesheet|feuille", re.I)
 

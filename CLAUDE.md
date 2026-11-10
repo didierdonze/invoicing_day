@@ -47,8 +47,7 @@ Exit codes: 1 failure · 2 hours report REFUSED · 3 Odoo unreachable (VPN) · 4
     evaluated with `uid` and `context_today()`, so the checks follow any change Odoo makes to them.
   - **Status per project:** red > yellow > green > idle, computed from the flags.
 - `invoicing_day/rules.py`: every id, threshold and mapping, overridable with `INVOICING_*` env vars. This
-  includes the dashboard action ids, Leila's user id, the activity type, the functional/technical
-  product/job mapping and the tolerances.
+  includes the dashboard action ids, the functional/technical product/job mapping and the tolerances.
 - `invoicing_day/page.py` and `report.py`: deterministic rendering of `figures.json` into the Confluence
   body (Atlassian MCP HTML format: panels, status lozenges, `<details>`) and into the French `report.md`.
   - The **Comments** column is the only content carried over, extracted verbatim per project from the

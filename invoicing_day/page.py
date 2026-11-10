@@ -185,13 +185,20 @@ STEPS = [
      "Print Timesheet Entries - External / Hours Block report (or ask Claude for the hours report) and attach it "
      "to the invoice (How-to step 6)."),
     ("step7_activity", "7 Admin notified",
-     "Every draft invoice has an activity “Validate/Send Invoice” assigned to Leila (or the invoice is already posted).",
+     "Every draft invoice of the cycle has an open activity, whatever its type; who it is assigned to is shown next "
+     "to the tick. A posted invoice counts as done (Odoo removes an activity once it is marked done).",
      "On the invoice: Schedule activity › Validate/Send Invoice › assigned to Leila (How-to step 7)."),
 ]
 
 
+def _activity_to(pr):
+    return sorted({u for i in pr.get("invoices") or [] for u in i.get("activity_to") or []})
+
+
 def _checklist(pr):
-    return "<p>" + "<br>".join(f"{'✅' if pr.get(k) else '⬜'} {esc(t)}" for k, t, _, _ in STEPS) + "</p>"
+    to = _activity_to(pr)
+    extra = {"step7_activity": f" → {', '.join(to)}" if to else ""}
+    return "<p>" + "<br>".join(f"{'✅' if pr.get(k) else '⬜'} {esc(t + extra.get(k, ''))}" for k, t, _, _ in STEPS) + "</p>"
 
 
 def _legend():
@@ -331,7 +338,8 @@ def _details(r, odoo_url, dashboards):
     if inv:
         parts.append("<p><strong>This cycle's invoices</strong>: " + "; ".join(
             f"{a(i['link'], i['name'])} {esc(i['state'])} {esc(money(i['amount_untaxed'], i['currency']))}"
-            f" · report {'✅' if i['report_attached'] else '—'} · activity {'✅' if i['admin_activity'] else '—'}" for i in inv) + "</p>")
+            f" · report {'✅' if i['report_attached'] else '—'}"
+            f" · activity {esc('→ ' + ', '.join(i.get('activity_to') or [])) if i['admin_activity'] else '—'}" for i in inv) + "</p>")
     body = "\n".join(p for p in parts if p) or "<p>Nothing to report.</p>"
     return f"<details><summary>{esc(r['project'])} — {STATUS[r['status']][1]}</summary>{body}</details>"
 

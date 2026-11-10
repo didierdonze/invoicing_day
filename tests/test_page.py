@@ -48,6 +48,17 @@ class PageTest(unittest.TestCase):
         for _, label, _, _ in STEPS:
             self.assertGreaterEqual(body.count(label), 2)              # legend + at least one row
 
+    def test_step7_shows_who_the_activity_is_assigned_to(self):
+        fig = figures()
+        inv = {"id": 9, "name": "draft #9", "kind": "out_invoice", "state": "draft", "amount_untaxed": 400.0,
+               "currency": "CHF", "report_attached": False, "admin_activity": True, "activity_to": ["Admin One"],
+               "link": "https://odoo.example/i"}
+        fig["rows"][1]["progress"] = {**fig["rows"][1]["progress"], "step45_draft": True, "step7_activity": True,
+                                      "invoices": [inv]}
+        body = build_body(fig)
+        self.assertIn("✅ 7 Admin notified → Admin One", body)          # any activity counts (Didier 2026-11-10)
+        self.assertIn("activity → Admin One", body)
+
     def test_no_storage_xml(self):
         body = build_body(figures())
         self.assertNotIn("<ac:", body)                                  # format guide: never storage XML
