@@ -43,7 +43,10 @@ Non classés (aucun signal) : ICT Team leader, ICT Department Manager, OUT Subco
 ## Étapes 6–7
 - Rapport d'heures joint : `ir.attachment` PDF sur la facture dont le nom contient
   rapport / heures / stunden / hours / timesheet / feuille.
-- Activité « Validate/Send Invoice » : `mail.activity.type` id 5, assignée à Leila Muminovic (`res.users` 272).
+- Étape 7 : **n'importe quelle activité ouverte** (`mail.activity`) sur la facture brouillon, quel que soit son type ;
+  la page affiche à qui elle est assignée (règle de Didier, 2026-11-10). Une facture postée compte comme faite :
+  Odoo supprime l'activité quand elle est marquée faite. Le How-to demande « Validate/Send Invoice »
+  (`mail.activity.type` 5) assignée à Leila Muminovic (`res.users` 272) — non vérifié par le script.
 
 ## Jira (REST v3, lecture seule)
 - Check Epic (How-to) : `timespent > 0 AND type NOT IN (Epic) AND updatedDate >= startOfMonth(-3M) AND parent = empty`,

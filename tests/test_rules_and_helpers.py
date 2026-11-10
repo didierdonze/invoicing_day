@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 
 from invoicing_day import rules
-from invoicing_day.invoicing import _months_back, action_domain, month_bounds
+from invoicing_day.invoicing import _months_back, action_domain, jira_keys, month_bounds
 from invoicing_day.odoo import READ_ONLY, Odoo, OdooError
 from tests.fakes import FakeOdoo
 
@@ -22,10 +22,38 @@ class RulesTest(unittest.TestCase):
 
 
 class HelpersTest(unittest.TestCase):
+    def test_activity_assignees_any_type(self):
+        from invoicing_day.invoicing import activity_assignees
+        acts = [{"activity_type_id": [5, "Validate/Send Invoice"], "user_id": [272, "Admin One"]},
+                {"activity_type_id": [1, "Email"], "user_id": [7, "PM Two"]},
+                {"activity_type_id": [4, "To Do"], "user_id": False}]
+        self.assertEqual(activity_assignees(acts), ["Admin One", "PM Two", "unassigned"])
+        self.assertEqual(activity_assignees([]), [])
+
+    def test_card_state(self):
+        from invoicing_day.invoicing import card_state
+        self.assertEqual(card_state([]), "absent")
+        self.assertEqual(card_state([{"task_id": [1, "Maint"], "so_line": [2, "SO"]}]), "placed")
+        self.assertEqual(card_state([{"task_id": [1, "Maint"], "so_line": [2, "SO"]},
+                                     {"task_id": False, "so_line": False}]), "unplaced")
+
+    def test_d04_cards_grouped_biggest_first(self):
+        from invoicing_day.invoicing import d04_cards
+        lines = [{"jira": "A-1", "hours": 0.5}, {"jira": "A-2", "hours": 2.0}, {"jira": "A-1", "hours": 0.25},
+                 {"jira": None, "hours": 0.1}]
+        self.assertEqual(d04_cards(lines), [{"key": "A-2", "lines": 1, "hours": 2.0},
+                                            {"key": "A-1", "lines": 2, "hours": 0.75},
+                                            {"key": None, "lines": 1, "hours": 0.1}])
+
     def test_month_bounds(self):
         self.assertEqual(month_bounds("2026-10"), (date(2026, 10, 1), date(2026, 10, 31)))
         self.assertEqual(month_bounds("2026-12"), (date(2026, 12, 1), date(2026, 12, 31)))
         self.assertEqual(month_bounds("2028-02")[1], date(2028, 2, 29))
+
+    def test_jira_keys(self):
+        self.assertEqual(jira_keys("FMEL, BIZ"), ["FMEL", "BIZ"])
+        self.assertEqual(jira_keys("BSIDM"), ["BSIDM"])
+        self.assertEqual(jira_keys(False), [])
 
     def test_months_back(self):
         self.assertEqual(_months_back(date(2026, 2, 1), 2), date(2025, 12, 1))

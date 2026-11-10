@@ -40,6 +40,47 @@ class PageTest(unittest.TestCase):
     def test_empty_comments_ignored(self):
         self.assertEqual(extract_comments(build_body(figures())), {})
 
+    def test_checklist_legend_explains_every_step(self):
+        from invoicing_day.page import STEPS
+        body = build_body(figures())
+        self.assertIn("How to read this table", body)
+        self.assertIn("Odoo-only", body)                                # no Jira link ≠ unclean (Didier 2026-11-10)
+        for _, label, _, _ in STEPS:
+            self.assertGreaterEqual(body.count(label), 2)              # legend + at least one row
+
+    def test_step7_shows_who_the_activity_is_assigned_to(self):
+        fig = figures()
+        inv = {"id": 9, "name": "draft #9", "kind": "out_invoice", "state": "draft", "amount_untaxed": 400.0,
+               "currency": "CHF", "report_attached": False, "admin_activity": True, "activity_to": ["Admin One"],
+               "link": "https://odoo.example/i"}
+        fig["rows"][1]["progress"] = {**fig["rows"][1]["progress"], "step45_draft": True, "step7_activity": True,
+                                      "invoices": [inv]}
+        body = build_body(fig)
+        self.assertIn("✅ 7 Admin notified → Admin One", body)          # any activity counts (Didier 2026-11-10)
+        self.assertIn("activity → Admin One", body)
+
+    def test_step1_unticked_links_what_to_correct(self):
+        fig = figures(jira={"available": True, "reason": None, "url": "https://jira.example"})
+        beta = fig["rows"][0]
+        beta["progress"] = {**beta["progress"], "step1_clean": False}
+        beta["controls"] = {**beta["controls"], "d04_cards": [{"key": "BET-1", "lines": 3, "hours": 1.5}],
+                            "check_epic": [{"key": f"BET-{n}", "summary": "s", "hours": 1.0,
+                                            "link": f"https://jira.example/browse/BET-{n}"} for n in range(10, 15)]
+                            + [{"key": "BET-99", "summary": "s", "hours": 1.0, "odoo": "placed",
+                                "link": "https://jira.example/browse/BET-99"}],
+                            "d03_count": 1, "d03_tasks_no_so": [{"id": 7, "name": "Task without SO item",
+                                                                "link": "https://odoo.example/t7"}]}
+        body = build_body(fig)
+        self.assertIn("⬜ 1 Data clean</p>", body)                       # hints right under the step (Didier 2026-11-10)
+        self.assertIn('↳ Jira, add an Epic: <a href="https://jira.example/browse/BET-10">BET-10</a>', body)
+        self.assertIn("issues/?jql=key%20in%20%28BET-10%2C%20BET-11", body)   # the rest in one Jira search
+        self.assertIn('<a href="https://jira.example/browse/BET-1">BET-1</a> (3)', body)
+        self.assertIn('href="https://odoo.example/web#action=4418">dashboard 04</a>', body)
+        self.assertIn('<a href="https://odoo.example/t7">Task without SO item</a>', body)
+        self.assertNotIn("BET-99", body)                                # already placed in Odoo → no hint
+        alpha = body[body.index("<strong>alpha_odoo</strong>"):]
+        self.assertNotIn("↳", alpha[:alpha.index("</tr>")])            # ticked → no hint
+
     def test_no_storage_xml(self):
         body = build_body(figures())
         self.assertNotIn("<ac:", body)                                  # format guide: never storage XML

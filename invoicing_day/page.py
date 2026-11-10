@@ -10,6 +10,7 @@ status lozenges, task lists in table cells, <details> expands, data-background o
 import html
 import re
 from html.parser import HTMLParser
+from urllib.parse import quote
 
 PARENT_FOLDER_ID = "1747615753"
 SPACE_KEY = "BS"
@@ -166,10 +167,115 @@ def _has_text(fragment):
 
 # ---------------------------------------------------------------- blocks
 
-def _checklist(pr):
-    items = [("step1_clean", "1 Clean"), ("step23_hours", "2–3 Hours"), ("step45_draft", "4–5 Draft"),
-             ("step6_report", "6 Report"), ("step7_activity", "7 Activity")]
-    return "<p>" + " · ".join(f"{'✅' if pr.get(k) else '⬜'} {esc(t)}" for k, t in items) + "</p>"
+# The checklist = the steps of "How to - Invoice your project". Each tick is COMPUTED from Odoo/Jira
+# at every run (invoicing.py, progress): (key, label, ✅ when, if ⬜ what to do).
+STEPS = [
+    ("step1_clean", "1 Data clean",
+     "No line for the project in Odoo › Invoicing Dashboards 03 / 04, and no Jira card with time but no Epic — "
+     "unless its hours are already on a task and SO item in Odoo (e.g. moved to Maintenance). "
+     "A project without Jira link (Connector tab empty) is Odoo-only: dashboard 02 does not apply to it.",
+     "Follow the ↳ links under the box: the Jira cards, Odoo tasks or timesheet lines to correct "
+     "(fixes in “How to fix” under Details, How-to step 1)."),
+    ("step23_hours", "2–3 Hours checked",
+     "The month's hours are all on an SO item, on the right kind of item (functional AM/BA/PM vs technical DEV/ARCH), "
+     "and Odoo can invoice all the hours that are not yet invoiced.",
+     "Project › Timesheet › filter To invoice › group by Sales Order Item › Mass edit (How-to steps 2–3)."),
+    ("step45_draft", "4–5 Draft invoice",
+     "An invoice (draft or posted) exists on the project's orders, created since the start of the invoicing cycle.",
+     "On each SO: create the invoice, period year to date, fields as in “Invoice fields” above (How-to steps 4–5)."),
+    ("step6_report", "6 Hours report attached",
+     "Every invoice of the cycle has an hours report PDF attached in Odoo.",
+     "Print Timesheet Entries - External / Hours Block report (or ask Claude for the hours report) and attach it "
+     "to the invoice (How-to step 6)."),
+    ("step7_activity", "7 Admin notified",
+     "Every draft invoice of the cycle has an open activity, whatever its type; who it is assigned to is shown next "
+     "to the tick. A posted invoice counts as done (Odoo removes an activity once it is marked done).",
+     "On the invoice: Schedule activity › Validate/Send Invoice › assigned to Leila (How-to step 7)."),
+]
+
+
+def _activity_to(pr):
+    return sorted({u for i in pr.get("invoices") or [] for u in i.get("activity_to") or []})
+
+
+SHOWN_INFO = ("STALE_TO_INVOICE", "ODOO_ONLY", "JIRA_NO_EPIC_PLACED")   # info flags worth a line under Details
+HINTS = 3          # direct links per kind under an unticked step; the rest via the dashboard / a Jira search
+
+
+def _short(s, n=40):
+    s = s or ""
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def _jira_link(ctx, key, text=None):
+    return a(f"{ctx['jira_url']}/browse/{key}", text or key) if ctx.get("jira_url") else esc(text or key)
+
+
+def _jira_search(ctx, keys, text):
+    if not ctx.get("jira_url"):
+        return esc(text)
+    return a(f"{ctx['jira_url']}/issues/?jql=" + quote(f"key in ({', '.join(keys)})"), text)
+
+
+def _dash(ctx, k, text):
+    d = ctx.get("dashboards", {}).get(k)
+    return a(f"{ctx['odoo_url']}/web#action={d['action_id']}", text) if d and ctx.get("odoo_url") else esc(text)
+
+
+def _step1_hints(r, ctx):
+    """↳ lines under an unticked “1 Data clean”: what to correct, with direct links."""
+    c, out = r["controls"], []
+    ce = [i for i in c.get("check_epic") or [] if i.get("odoo") != "placed"]
+    if ce:
+        more = f" · {_jira_search(ctx, [i['key'] for i in ce], f'all {len(ce)}')}" if len(ce) > HINTS else ""
+        out.append("Jira, add an Epic: " + ", ".join(a(i["link"], i["key"]) for i in ce[:HINTS]) + more)
+    if c.get("d04_count"):
+        cards = c.get("d04_cards") or []
+        shown = ", ".join((_jira_link(ctx, x["key"]) if x["key"] else "no card") + f" ({x['lines']})"
+                          for x in cards[:HINTS])
+        out.append(f"04, {c['d04_count']} TS line(s) without task: {shown}"
+                   + (" …" if len(cards) > HINTS else "")
+                   + f" → Epic in Jira + Refresh workload, or mass edit · {_dash(ctx, '04', 'dashboard 04')}")
+    if c.get("d03_count"):
+        ts = c.get("d03_tasks_no_so") or []
+        shown = ", ".join(a(t["link"], _short(t["name"])) for t in ts[:HINTS])
+        out.append(f"03, {c['d03_count']} task(s) without SO item: {shown}"
+                   + (" …" if c["d03_count"] > HINTS else "") + f" · {_dash(ctx, '03', 'dashboard 03')}")
+    return [f'<p style="font-size: 13px">↳ {h}</p>' for h in out]
+
+
+def _checklist(r, ctx=None):
+    pr, ctx = r["progress"], ctx or {}
+    to = _activity_to(pr)
+    extra = {"step7_activity": f" → {', '.join(to)}" if to else ""}
+    out, cur = [], []
+    for k, t, _, _ in STEPS:
+        cur.append(f"{'✅' if pr.get(k) else '⬜'} {esc(t + extra.get(k, ''))}")
+        hints = _step1_hints(r, ctx) if k == "step1_clean" and not pr.get(k) else []
+        if hints:
+            out.append("<p>" + "<br>".join(cur) + "</p>")
+            out += hints
+            cur = []
+    if cur:
+        out.append("<p>" + "<br>".join(cur) + "</p>")
+    return "".join(out)
+
+
+def _legend():
+    head = "".join(f"<th><p><strong>{h}</strong></p></th>" for h in ("Checklist step", "✅ means (checked automatically)",
+                                                                    "⬜ → what to do"))
+    rows = "".join(f"<tr><td><p><strong>{esc(t)}</strong></p></td><td><p>{esc(ok)}</p></td><td><p>{esc(todo)}</p></td></tr>"
+                   for _, t, ok, todo in STEPS)
+    status_line = ("<p><strong>Status</strong>: "
+                   f"{status('red')} something to correct in Odoo / Jira before invoicing · "
+                   f"{status('yellow')} a point to verify, invoicing possible · "
+                   f"{status('green')} nothing to fix, amount ready to invoice · "
+                   f"{status('idle')} nothing to invoice.</p>")
+    note = ("<p style=\"font-size: 14px\">The ticks and statuses are recomputed from Odoo and Jira at every run of "
+            "<code>invoicing_day</code>: a tick added by hand is overwritten. Write remarks in the "
+            "<strong>Comments</strong> column — it is kept from run to run and month to month.</p>")
+    return "\n".join(["<h3>How to read this table</h3>", status_line,
+                      f"<table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>", note])
 
 
 def _to_invoice_cell(r):
@@ -201,7 +307,7 @@ def _unpaid_cell(r):
     return "".join(out)
 
 
-def _row(r, comment):
+def _row(r, comment, ctx=None):
     _, _, bg = STATUS[r["status"]]
     bga = f' data-background="{bg}"' if bg else ""
     sub = " · ".join(x for x in (r.get("client"), r.get("manager")) if x)
@@ -209,7 +315,7 @@ def _row(r, comment):
         f'<p><strong>{esc(r["project"])}</strong></p><p style="font-size: 14px">{esc(sub)}</p>',
         f"<p>{status(r['status'])}</p>",
         _to_invoice_cell(r),
-        _checklist(r["progress"]),
+        _checklist(r, ctx),
         _unpaid_cell(r),
         comment or "<p></p>",
     ]
@@ -217,11 +323,11 @@ def _row(r, comment):
     return f"<tr>{tds}</tr>"
 
 
-def _table(rows, comments):
+def _table(rows, comments, ctx=None):
     head = "".join(f'<th data-colwidth="{w}"><p><strong>{h}</strong></p></th>'
                    for w, h in zip(COLWIDTHS, ("Project", "Status", "To invoice (excl. VAT)", "Checklist (How-to steps)",
                                                "Unpaid &amp; late", "Comments")))
-    body = "\n".join(_row(r, comments.get(r["project"])) for r in rows)
+    body = "\n".join(_row(r, comments.get(r["project"]), ctx) for r in rows)
     return (f'<table data-layout="full-width" data-display-mode="fixed"><thead><tr>{head}</tr></thead>'
             f"<tbody>\n{body}\n</tbody></table>")
 
@@ -247,7 +353,7 @@ def _details(r, odoo_url, dashboards):
     c = r["controls"]
     parts = []
     if r["flags"]:
-        shown = [f for f in r["flags"] if f["level"] != "info" or f["code"] == "STALE_TO_INVOICE"]
+        shown = [f for f in r["flags"] if f["level"] != "info" or f["code"] in SHOWN_INFO]
         if shown:
             parts.append("<ul>" + "".join(f"<li>{LEVEL_ICON[f['level']]} {esc(f['msg'])}</li>" for f in shown) + "</ul>")
     noted = [it for it in r["proposal"] if it.get("note") and it["kind"] == "tm"]
@@ -267,8 +373,8 @@ def _details(r, odoo_url, dashboards):
     if c.get("d03_tasks_no_so"):
         parts.append(f"<p><strong>03 - Tasks not linked to a SO line</strong>: {c['d03_count']} — "
                      + esc(_examples(c["d03_tasks_no_so"], lambda t: t["name"])) + dash_link("03") + "</p>")
-    if c.get("check_epic"):
-        ce = c["check_epic"]
+    ce = [i for i in c.get("check_epic") or [] if i.get("odoo") != "placed"]
+    if ce:
         parts.append(f"<p><strong>Jira cards with time and no Epic</strong>: {len(ce)} — "
                      + ", ".join(a(i["link"], i["key"]) for i in ce[:10]) + (f" … (+{len(ce) - 10})" if len(ce) > 10 else "") + "</p>")
     jv = c.get("jira_vs_odoo")
@@ -292,7 +398,8 @@ def _details(r, odoo_url, dashboards):
     if inv:
         parts.append("<p><strong>This cycle's invoices</strong>: " + "; ".join(
             f"{a(i['link'], i['name'])} {esc(i['state'])} {esc(money(i['amount_untaxed'], i['currency']))}"
-            f" · report {'✅' if i['report_attached'] else '—'} · activity {'✅' if i['admin_activity'] else '—'}" for i in inv) + "</p>")
+            f" · report {'✅' if i['report_attached'] else '—'}"
+            f" · activity {esc('→ ' + ', '.join(i.get('activity_to') or [])) if i['admin_activity'] else '—'}" for i in inv) + "</p>")
     body = "\n".join(p for p in parts if p) or "<p>Nothing to report.</p>"
     return f"<details><summary>{esc(r['project'])} — {STATUS[r['status']][1]}</summary>{body}</details>"
 
@@ -350,7 +457,10 @@ def build_body(fig, comments=None):
                "<li>Activity <em>Validate/Send Invoice</em> assigned to Leila: “Hello, The invoice is ready to be sent "
                "with the hour details attached. Thank you!”</li></ul>")
     out.append("<h2>Projects</h2>")
-    out.append(_table(table_rows, comments))
+    out.append(_legend())
+    ctx = {"odoo_url": fig["links"]["odoo"], "dashboards": fig["meta"].get("dashboards") or {},
+           "jira_url": (fig.get("jira") or {}).get("url")}
+    out.append(_table(table_rows, comments, ctx))
     if idle:
         out.append(f"<p style=\"font-size: 14px\">Nothing to invoice and nothing to fix: {esc(', '.join(idle))}.</p>")
     if gc and gc["lines"]:
@@ -361,12 +471,13 @@ def build_body(fig, comments=None):
                "<li>04 - TS lines without tasks: add the Epic in the Jira card, then select the lines › Action › "
                "<em>Refresh workload from Jira</em>; or Action › <em>Mass edit (Timesheets)</em> › Task + Sales Order Item "
                "(or Maintenance project + Task).</li>"
-               "<li>02 / 03: link the project to Jira, link the task to an SO line.</li>"
+               "<li>03: link the task to an SO line. (02, project without Jira link: fine for an Odoo-only project.)</li>"
                "<li>Hours without SO item or on the wrong item (functional AM/BA/PM vs technical DEV/ARCH): "
                "project › Timesheet › filter To invoice › group by Sales Order Item › <em>Mass edit</em>.</li>"
                "<li>Rounded hours: round down on the TS (internal); a commercial gesture is a rebate line on the invoice.</li>"
                "</ul><p>Per-item breakdown of each proposal: <code>runs/AAAA-MM/report.md</code> and "
                "<code>figures.json</code> on Didier's machine.</p></div>")
     out += [_details(r, fig['links']['odoo'], fig['meta'].get('dashboards') or {}) for r in table_rows
-            if any(f['level'] != 'info' or f['code'] == 'STALE_TO_INVOICE' for f in r['flags']) or r['progress']['invoices']]
+            if any(f['level'] != 'info' or f['code'] in SHOWN_INFO for f in r['flags'])
+            or r['progress']['invoices']]
     return "\n".join(out) + "\n"          # one block per line: readable in chunks, < 2 k chars per line

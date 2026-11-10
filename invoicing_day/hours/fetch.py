@@ -35,7 +35,7 @@ from ..constants import CONFIRMED_STATES, TIME_UOM_NAMES, _u  # noqa: F401  (TIM
 CMD = "python3 -m invoicing_day hours"
 
 SO_FIELDS = ["id", "name", "state", "date_order", "client_order_ref"]
-LINE_FIELDS = ["id", "order_id", "sequence", "name", "display_type", "is_downpayment",
+LINE_FIELDS = ["id", "order_id", "sequence", "name", "display_type", "is_downpayment", "is_expense", "write_date",
                "product_uom_qty", "qty_delivered", "qty_invoiced", "qty_delivered_method",
                "product_uom"]
 MOVE_FIELDS = ["id", "name", "move_type", "state", "payment_state", "invoice_date", "reversed_entry_id"]
@@ -181,7 +181,16 @@ def fetch_hours(client, entry, invoice=None, date_from=None, date_to=None, today
     _require_fields(client, invoice_mode)
     lines = client.search_read("sale.order.line", [("order_id", "in", so_ids)], LINE_FIELDS,
                                order="order_id, sequence, id")
-    scope = {l["id"]: l for l in lines if not l.get("display_type") and not l.get("is_downpayment")}
+    # Re-invoiced expenses (is_expense) are left out: Odoo names them "<Employee>: <description>", and
+    # an hours report never shows people (found on allchemet, draft #221708, 2026-11-10). They are on
+    # the invoice itself. Kept in all_line_ids so their invoice lines are not reported as other orders.
+    scope = {l["id"]: l for l in lines
+             if not l.get("display_type") and not l.get("is_downpayment") and not l.get("is_expense")}
+    expenses = [l for l in lines if l.get("is_expense") and not l.get("display_type")]
+    if expenses:
+        checks.append(_chk("info", "EXPENSES_OMITTED",
+                           f"{len(expenses)} re-invoiced expense line(s) not shown — they carry employee names "
+                           "and are listed on the invoice itself"))
     all_line_ids = {l["id"] for l in lines}
     scope_ids = list(scope)
     if not scope_ids:
@@ -447,6 +456,31 @@ def fetch_hours(client, entry, invoice=None, date_from=None, date_to=None, today
                                f"Invoiced cannot be rebuilt from the invoice lines on {len(bad_inv)} line(s) — the "
                                "dated figure may be wrong there: " + "; ".join(bad_inv[:5])
                                + (" …" if len(bad_inv) > 5 else "")))
+
+    # "Livré" at the cut-off for lines NOT delivered by timesheets (manual, milestones…). Odoo keeps no
+    # history of qty_delivered (no tracking, no audit log, chatter not readable — checked 2026-11-10), so
+    # Didier's request (2026-11-10: "show the value at the cut-off") is met by reconstruction, in order:
+    #   1. the line was not written after the cut-off → today's value IS the value at the cut-off;
+    #   2. invoice mode, and today delivered == invoiced (the PM keeps the manual figure in step with
+    #      invoicing) → delivered at the cut-off = invoiced up to and including this invoice;
+    #   3. otherwise today's value, and DELIVERED_UNDATED warns the PM.
+    from_invoices = []
+    for lid, l in scope.items():
+        if lid in delivered_at:
+            continue
+        wd = str(l.get("write_date") or "")[:10]
+        now_d, now_i = l.get("qty_delivered") or 0.0, l.get("qty_invoiced") or 0.0
+        tol = meta[lid]["rounding"] + EPS
+        if wd and wd <= cutoff.isoformat():
+            delivered_at[lid] = round(now_d, meta[lid]["decimals"])
+        elif invoice_mode and abs(now_d - now_i) <= tol and lid in invoiced_at:
+            delivered_at[lid] = invoiced_at[lid]
+            from_invoices.append(_label(l))
+    if from_invoices:
+        checks.append(_chk("info", "DELIVERED_FROM_INVOICES",
+                           f"Delivered at {cutoff.isoformat()} on {_names(from_invoices)} (not timesheet-based, no "
+                           "history in Odoo) = invoiced up to and including this invoice, since delivered = invoiced "
+                           "today"))
 
     # rows
     def nonzero(v):

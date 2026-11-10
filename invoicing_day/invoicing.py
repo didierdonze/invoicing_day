@@ -33,6 +33,11 @@ SO_FIELDS = ["id", "name", "state", "date_order", "client_order_ref", "partner_i
 
 # ---------------------------------------------------------------- helpers
 
+def jira_keys(raw):
+    """'FMEL, BIZ' → ['FMEL', 'BIZ']."""
+    return [k.strip().upper() for k in re.split(r"[,;\s]+", raw or "") if k.strip()]
+
+
 def month_bounds(month):
     y, m = map(int, month.split("-"))
     first = date(y, m, 1)
@@ -48,6 +53,30 @@ def _id(v):
 
 def _name(v):
     return _u(v[1]) if isinstance(v, (list, tuple)) and len(v) > 1 else None
+
+
+def activity_assignees(activities):
+    """Step 7: any open activity on the invoice counts, whatever its type; returns who it is assigned to."""
+    return sorted({_name(a.get("user_id")) or "unassigned" for a in activities})
+
+
+def card_state(lines):
+    """A Jira card without Epic, seen from Odoo: "placed" when all its timesheet lines are on a task AND an SO item
+    (How-to fix #2, e.g. moved to Maintenance — nothing left to fix), "unplaced" otherwise, "absent" if not in Odoo."""
+    if not lines:
+        return "absent"
+    return "placed" if all(l.get("task_id") and l.get("so_line") for l in lines) else "unplaced"
+
+
+def d04_cards(lines):
+    """Dashboard 04 lines grouped by Jira card (None = no card): what to fix, biggest first."""
+    by = defaultdict(lambda: {"lines": 0, "hours": 0.0})
+    for l in lines:
+        d = by[l.get("jira")]
+        d["lines"] += 1
+        d["hours"] += l.get("hours") or 0.0
+    return sorted(({"key": k, "lines": v["lines"], "hours": r2(v["hours"])} for k, v in by.items()),
+                  key=lambda c: (-c["hours"], c["key"] or ""))
 
 
 def r2(x):
@@ -276,15 +305,35 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
             jira_state["reason"] = "no Jira configuration (~/.config/invoicing_day/jira.env)"
         else:
             jira_state["available"] = True
+            jira_state["url"] = jira.url
     else:
         jira_state["reason"] = "disabled (--no-jira)"
     if not jira_state["available"]:
         meta["skipped"].append(f"Jira controls skipped: {jira_state['reason']}")
-    keys = {pid: (pdet.get(pid, {}).get("jira_key") or "").strip() or None for pid in pids}
+    # project.project.jira_key may hold several keys ("FMEL, BIZ"). A key used by several Grammont
+    # projects (e.g. BIZ) cannot be attributed to one of them: it is left out and reported.
+    all_keys = {pid: jira_keys(pdet.get(pid, {}).get("jira_key")) for pid in pids}
+    usage = defaultdict(list)
+    for pid, ks in all_keys.items():
+        for k in ks:
+            usage[k].append(pid)
+    shared = sorted(k for k, ps in usage.items() if len(ps) > 1)
+    keys = {pid: [k for k in ks if k not in shared] for pid, ks in all_keys.items()}
+    if shared and jira_state["available"]:
+        meta["skipped"].append("Jira key(s) shared by several projects, not checked: "
+                               + ", ".join(f"{k} ({len(usage[k])} projects)" for k in shared))
     check_epic, jira_month = {}, {}
     if jira_state["available"]:
         try:
             check_epic, jira_month = _jira_controls(client, jira, keys, first, last)
+            ce_keys = sorted({i["key"] for items in check_epic.values() for i in items})
+            by_card = defaultdict(list)
+            for l in (client.search_read(TS, [["jira_issue_key", "in", ce_keys]], ["jira_issue_key", "task_id", "so_line"])
+                      if ce_keys else []):
+                by_card[l["jira_issue_key"]].append(l)
+            for items in check_epic.values():
+                for i in items:
+                    i["odoo"] = card_state(by_card.get(i["key"]))
         except Exception as e:                                  # noqa: BLE001 — reported, never fatal
             jira_state.update(available=False, reason=str(e))
             meta["skipped"].append(f"Jira controls failed: {e}")
@@ -299,7 +348,9 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
         rows.append(_row(client, p, pdet.get(pid, {}), ti_by_p[pid], act.get(pid), tempo.get(pid, 0.0),
                          proj_orders.get(pid, []), orders, sols, prods, hpu, remaining, jobs, moves, cyc,
                          cyc_lines, atts, acts, pid in d02, d03.get(pid, []), d04.get(pid, []),
-                         keys.get(pid), check_epic.get(pid), jira_month.get(pid), jira_state, first, last, today,
+                         ", ".join(all_keys.get(pid) or []) or None, check_epic.get(pid) if keys.get(pid) else None,
+                         jira_month.get(pid), jira_state if keys.get(pid) or not all_keys.get(pid) else
+                         {"available": False, "reason": "shared key only"}, first, last, today,
                          active_orders, month_lines, no_so_month.get(pid, {})))
     order = {"red": 0, "yellow": 1, "green": 2, "idle": 3}
     rows.sort(key=lambda r: (order[r["status"]], r["project"].lower()))
@@ -340,7 +391,7 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
 
 def _jira_controls(client, jira, keys, first, last):
     """Check Epic (How-to step 1A) + Jira vs Odoo hours of the month, per project."""
-    by_key = {k: pid for pid, k in keys.items() if k}
+    by_key = {k: pid for pid, ks in keys.items() for k in ks}
     if not by_key:
         return {}, {}
     check = defaultdict(list)
@@ -353,15 +404,17 @@ def _jira_controls(client, jira, keys, first, last):
     a = int(datetime(first.year, first.month, first.day, tzinfo=TZ).timestamp() * 1000)
     b = int(datetime.combine(last + timedelta(days=1), datetime.min.time(), TZ).timestamp() * 1000)
     month = {}
-    for k, pid in by_key.items():
-        jh = {}
-        jql = (f'project = "{k}" AND worklogDate >= "{first.isoformat()}" AND worklogDate <= "{last.isoformat()}"')
-        for i in jira.search(jql, fields=("summary",)):
-            jh[i["key"]] = jira.worklog_seconds(i["key"], a, b) / 3600
-        oh = defaultdict(float)
-        for l in client.search_read(TS, [["jira_issue_key", "=like", f"{k}-%"], ["date", ">=", first.isoformat()],
-                                         ["date", "<=", last.isoformat()]], ["jira_issue_key", "unit_amount"]):
-            oh[l["jira_issue_key"]] += l["unit_amount"] or 0.0
+    for pid, ks in keys.items():
+        if not ks:
+            continue
+        jh, oh = {}, defaultdict(float)
+        for k in ks:
+            jql = (f'project = "{k}" AND worklogDate >= "{first.isoformat()}" AND worklogDate <= "{last.isoformat()}"')
+            for i in jira.search(jql, fields=("summary",)):
+                jh[i["key"]] = jira.worklog_seconds(i["key"], a, b) / 3600
+            for l in client.search_read(TS, [["jira_issue_key", "=like", f"{k}-%"], ["date", ">=", first.isoformat()],
+                                             ["date", "<=", last.isoformat()]], ["jira_issue_key", "unit_amount"]):
+                oh[l["jira_issue_key"]] += l["unit_amount"] or 0.0
         diffs = []
         for issue in sorted(set(jh) | set(oh), key=lambda s: (len(s), s)):
             j, o = jh.get(issue, 0.0), oh.get(issue, 0.0)
@@ -380,14 +433,24 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
 
     # Step 1 — Invoicing Dashboards 02/03/04 + Jira Check Epic
     if not_in_jira:
-        flags.append(flag("red", "D02_NOT_IN_JIRA", "project not linked with Jira (dashboard 02)"))
+        # Didier 2026-11-10: a project with no Jira link (Connector tab empty = dashboard 02) is an
+        # Odoo-only project by design — not an error, and it does not uncheck "1 Data clean".
+        flags.append(flag("info", "ODOO_ONLY", "no Jira link (Connector tab empty): Odoo-only project, "
+                                               "dashboard 02 and the Jira checks do not apply"))
     if d03:
         flags.append(flag("red", "D03_TASK_NO_SO", f"{len(d03)} task(s) not linked to an SO line (dashboard 03)"))
     if d04:
         flags.append(flag("red", "D04_TS_NO_TASK", f"{len(d04)} TS line(s) without task, "
                                                    f"{r2(sum(l['hours'] or 0 for l in d04))} h (dashboard 04)"))
-    if check_epic:
-        flags.append(flag("red", "JIRA_NO_EPIC", f"{len(check_epic)} Jira card(s) with time and no Epic (Check Epic filter)"))
+    epic_fix = [i for i in check_epic or [] if i.get("odoo") != "placed"]
+    epic_ok = [i for i in check_epic or [] if i.get("odoo") == "placed"]
+    if epic_fix:
+        flags.append(flag("red", "JIRA_NO_EPIC", f"{len(epic_fix)} Jira card(s) with time and no Epic (Check Epic filter)"))
+    if epic_ok:                       # Didier 2026-11-10: already on a task + SO item in Odoo → nothing to fix
+        flags.append(flag("info", "JIRA_NO_EPIC_PLACED",
+                          f"{len(epic_ok)} Jira card(s) without Epic but already on a task and SO item in Odoo "
+                          f"(e.g. Maintenance), nothing to fix: {', '.join(i['key'] for i in epic_ok[:5])}"
+                          + (" …" if len(epic_ok) > 5 else "")))
 
     # Steps 2–3 — To invoice, grouped by SO item
     by_line = defaultdict(lambda: {"hours": 0.0, "rounded": 0.0})
@@ -551,15 +614,14 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
         name = m["name"] if m.get("name") not in ("/", False, None) else f"draft #{m['id']}"
         pdfs = [a for a in atts.get(m["id"], []) if (a.get("mimetype") or "") == "application/pdf"]
         report = [a for a in pdfs if rules.REPORT_ATTACHMENT.search(a.get("name") or "")]
-        leila = [a for a in acts.get(m["id"], []) if _id(a.get("activity_type_id")) == rules.ADMIN_ACTIVITY_TYPE_ID
-                 and _id(a.get("user_id")) == rules.ADMIN_USER_ID]
+        assignees = activity_assignees(acts.get(m["id"], []))
         prog.append({"id": m["id"], "name": name, "kind": m["move_type"], "state": m["state"],
                      "invoice_date": m.get("invoice_date") or None, "accounting_date": m.get("date") or None,
                      "ref": m.get("ref") or None, "amount_untaxed": r2(m.get("amount_untaxed")),
                      "currency": _name(m.get("currency_id")) or "CHF",
-                     "report_attached": bool(report), "admin_activity": bool(leila),
+                     "report_attached": bool(report), "admin_activity": bool(assignees), "activity_to": assignees,
                      "link": client.link("account.move", m["id"])})
-    step1 = not any(f["code"] in ("D02_NOT_IN_JIRA", "D03_TASK_NO_SO", "D04_TS_NO_TASK", "JIRA_NO_EPIC") for f in flags)
+    step1 = not any(f["code"] in ("D03_TASK_NO_SO", "D04_TS_NO_TASK", "JIRA_NO_EPIC") for f in flags)
     step23 = not any(f["code"] in ("TS_NO_SO_ITEM", "ITEM_CATEGORY", "HOURS_NOT_INVOICEABLE") for f in flags)
     invs = [x for x in prog if x["kind"] == "out_invoice"]
     progress = {"step1_clean": step1, "step23_hours": step23, "step45_draft": bool(invs),
@@ -584,7 +646,7 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
         "controls": {
             "d02_not_in_jira": not_in_jira, "d03_tasks_no_so": d03[:rules.DETAIL_LIMIT], "d03_count": len(d03),
             "d04_ts_no_task": d04[:rules.DETAIL_LIMIT], "d04_count": len(d04),
-            "d04_hours": r2(sum(l["hours"] or 0 for l in d04)),
+            "d04_hours": r2(sum(l["hours"] or 0 for l in d04)), "d04_cards": d04_cards(d04)[:rules.DETAIL_LIMIT],
             "check_epic": None if check_epic is None and not jira_state["available"] else (check_epic or []),
             "no_so_item": {k: r2(v) for k, v in no_so.items()},
             "item_category": cat_list[:rules.DETAIL_LIMIT],
