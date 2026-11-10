@@ -69,6 +69,15 @@ précédent du même mois est conservé automatiquement dans `figures.prev.json`
   `python3 -m invoicing_day page --figures runs/AAAA-MM/figures.json --previous runs/AAAA-MM/current.html --same-page --out runs/AAAA-MM/body.html` ;
 - passer à l'étape 5 avec `updateConfluencePage` (même statut qu'avant : un brouillon reste brouillon).
 
+**Page « live doc »** (`subtype: "live"` dans la réponse de `getConfluencePage` ; la page d'octobre 2026 l'est
+depuis le 2026-11-10, test réussi) : chaque frappe de l'équipe y est enregistrée aussitôt, et la mise à jour
+remplace tout le corps. Donc :
+- toujours `run` **avant** de lire la page (jamais l'inverse), et enchaîner lecture → `page` → écriture sans pause ;
+- **juste avant** `updateConfluencePage`, relire la page et comparer son corps à `current.html` (`cmp`) : s'il a
+  changé, réécrire `current.html` et relancer `page` avant d'écrire ;
+- `status: "current"` (une live doc n'a pas de brouillon) ;
+- l'API retire les `data-local-id` des commentaires recopiés : le texte reste identique, ce n'est pas une erreur.
+
 **Elle n'existe pas → nouvelle édition** :
 - édition précédente : `searchConfluenceUsingCql`
   `ancestor = 1747615753 AND type = page AND title ~ "Invoicing Day Grammont" ORDER BY created DESC`,
