@@ -52,6 +52,8 @@ Exit codes: 1 failure · 2 hours report REFUSED · 3 Odoo unreachable (VPN) · 4
   body (Atlassian MCP HTML format: panels, status lozenges, `<details>`) and into the French `report.md`.
   - The **Comments** column is the only content carried over, extracted verbatim per project from the
     previous edition (`--previous`) or from the page being updated (`--same-page`, which keeps local ids).
+  - Since October 2026 the monthly page is a Confluence **live doc** (`subtype: "live"`, no draft): the
+    team types straight into it, so the skill re-reads the page just before each full-body update.
   - The body must fit in one MCP call (~50 k characters for 39 projects). The full detail lives in
     `figures.json` and `report.md`.
 - `invoicing_day/jira.py`: read-only Jira Cloud REST (enhanced search + worklogs). It is optional: without

@@ -38,8 +38,9 @@ script le fait : la proposition part des lignes *To invoice* de chaque projet, g
 
 ## 1. Mode
 
-- **Interactif** (Didier lance le skill) : confirmer le mois facturé ; demander **brouillon** (défaut) ou
-  **page publiée**. Pas d'autre question avant le run.
+- **Interactif** (Didier lance le skill) : confirmer le mois facturé. Pas d'autre question avant le run. La page
+  du mois est une **live doc** (décision de Didier, 2026-11-10) : visible par l'équipe dès sa création, sans
+  brouillon. Pour relire avant que l'équipe la voie : l'essai à blanc.
 - **Essai à blanc** (la consigne contient « dry-run ») : tout se déroule, mais on s'arrête après l'étape 4 avec
   `runs/AAAA-MM/body.html` ; rien n'est écrit dans Confluence.
 
@@ -55,8 +56,8 @@ précédent du même mois est conservé automatiquement dans `figures.prev.json`
 
 ## 3. La page du mois existe-t-elle ?
 
-1. `runs/AAAA-MM/page.json` présent → la page a été créée par un run précédent (un brouillon n'est pas trouvé
-   par la recherche Confluence).
+1. `runs/AAAA-MM/page.json` présent → la page a été créée par un run précédent (il retrouve aussi un ancien
+   brouillon de page classique, que la recherche Confluence ne trouve pas).
 2. Sinon `searchConfluenceUsingCql` :
    `ancestor = 1747615753 AND type = page AND title = "AAAA.MM - Invoicing Day Grammont"`.
 
@@ -67,10 +68,11 @@ précédent du même mois est conservé automatiquement dans `figures.prev.json`
 - `getConfluencePage` (`contentFormat: "html"`) sur la page, écrire son corps **tel quel** dans
   `runs/AAAA-MM/current.html`, puis
   `python3 -m invoicing_day page --figures runs/AAAA-MM/figures.json --previous runs/AAAA-MM/current.html --same-page --out runs/AAAA-MM/body.html` ;
-- passer à l'étape 5 avec `updateConfluencePage` (même statut qu'avant : un brouillon reste brouillon).
+- passer à l'étape 5 avec `updateConfluencePage` (même statut qu'avant ; une ancienne page classique en brouillon
+  reste brouillon).
 
-**Page « live doc »** (`subtype: "live"` dans la réponse de `getConfluencePage` ; la page d'octobre 2026 l'est
-depuis le 2026-11-10, test réussi) : chaque frappe de l'équipe y est enregistrée aussitôt, et la mise à jour
+**Page « live doc »** (`subtype: "live"` dans la réponse de `getConfluencePage` ; toutes les pages depuis
+octobre 2026 — mise à jour testée le 2026-11-10) : chaque frappe de l'équipe y est enregistrée aussitôt, et la mise à jour
 remplace tout le corps. Donc :
 - toujours `run` **avant** de lire la page (jamais l'inverse), et enchaîner lecture → `page` → écriture sans pause ;
 - **juste avant** `updateConfluencePage`, relire la page et comparer son corps à `current.html` (`cmp`) : s'il a
@@ -99,14 +101,14 @@ relance.
 
 `getContentFormatGuide` (`toolName` = l'outil utilisé) une fois, puis :
 - **création** : `createConfluencePage` — `cloudId: "camptocamp.atlassian.net"`, `spaceId: "BS"`,
-  `parentId: "1747615753"`, `title`, `contentFormat: "html"`, `status: "draft"` (ou `"current"` si Didier l'a
-  demandé), page classique (pas de `subtype: "live"`), `body` = le contenu de `body.html` **inchangé** ;
+  `parentId: "1747615753"`, `title`, `contentFormat: "html"`, `contentType: "page"`, **`subtype: "live"`**,
+  `status: "current"`, `body` = le contenu de `body.html` **inchangé** ;
   aussitôt après, écrire `runs/AAAA-MM/page.json` : `{"id", "url", "status", "created_at"}` ;
 - **mise à jour** : `updateConfluencePage` — `pageId`, `title` inchangé, `contentFormat: "html"`, même
   `status`, `versionMessage: "invoicing_day run <date>"`, `body` = `body.html` inchangé.
 
-Si l'appel échoue ou reste muet, **ne pas le relancer** (risque de doublon de brouillon) : le dire, Didier
-vérifie ses brouillons.
+Si l'appel échoue ou reste muet, **ne pas le relancer** (risque de doublon) : le dire, Didier vérifie le
+dossier Invoicing Day.
 
 ## 6. Vérifier sur la page réelle
 
