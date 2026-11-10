@@ -17,3 +17,9 @@ node_modules/
 .idea/
 .vscode/
 *.swp
+
+# Run outputs: customer financial data, never committed
+runs/
+
+# Python bytecode
+*.pyc
