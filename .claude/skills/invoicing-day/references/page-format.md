@@ -9,12 +9,15 @@ panels, status lozenges, `<details>`, `data-background` sur les cellules). Rien 
    impayés (total, dont en retard) + contrôles d'équipe (01 Garbage Collectors, leads / opportunités à nettoyer).
 4. **Invoice fields (How-to steps 4–7)** : période YTD, date de facture, date comptable, référence de paiement
    vide, référence client `<SO> - <Mois> <Année>`, rapport d'heures, activité à Leila.
-5. **Tableau Projects**, une ligne par projet non « idle » (ou ayant un commentaire), trié rouge → jaune → vert :
+5. **« How to read this table »** juste sous « Projects » : sens des 4 statuts, puis un tableau des 5 étapes de la
+   checklist (✅ = ce que le script vérifie, ⬜ = quoi faire, avec l'étape du How-to) et le rappel que les coches
+   sont recalculées à chaque run (les remarques vont dans Comments). Source unique : `STEPS` dans `page.py`.
+6. **Tableau Projects**, une ligne par projet non « idle » (ou ayant un commentaire), trié rouge → jaune → vert :
    Project (code en gras, client · PM) | Status | To invoice (total, puis une ligne par SO : montant, heures,
-   types non T&M) | Checklist (✅/⬜ 1 Clean · 2–3 Hours · 4–5 Draft · 6 Report · 7 Activity, calculée) |
+   types non T&M) | Checklist (✅/⬜ une étape par ligne : 1 Data clean · 2–3 Hours checked · 4–5 Draft invoice · 6 Hours report attached · 7 Admin notified, calculée) |
    Unpaid & late | **Comments (de Didier, recopiés tels quels)**.
    Les projets « idle » (rien à facturer, rien à corriger) tiennent en une ligne sous le tableau.
-6. **Details per project** : panel « How to fix » une fois, puis un `<details>` par projet ayant un signal :
+7. **Details per project** : panel « How to fix » une fois, puis un `<details>` par projet ayant un signal :
    messages, exemples (5 au plus) et lien vers le dashboard Odoo concerné, factures du cycle.
 
 ## Statuts
