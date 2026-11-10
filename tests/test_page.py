@@ -40,6 +40,13 @@ class PageTest(unittest.TestCase):
     def test_empty_comments_ignored(self):
         self.assertEqual(extract_comments(build_body(figures())), {})
 
+    def test_checklist_legend_explains_every_step(self):
+        from invoicing_day.page import STEPS
+        body = build_body(figures())
+        self.assertIn("How to read this table", body)
+        for _, label, _, _ in STEPS:
+            self.assertGreaterEqual(body.count(label), 2)              # legend + at least one row
+
     def test_no_storage_xml(self):
         body = build_body(figures())
         self.assertNotIn("<ac:", body)                                  # format guide: never storage XML

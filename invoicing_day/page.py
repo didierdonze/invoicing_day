@@ -166,10 +166,48 @@ def _has_text(fragment):
 
 # ---------------------------------------------------------------- blocks
 
+# The checklist = the steps of "How to - Invoice your project". Each tick is COMPUTED from Odoo/Jira
+# at every run (invoicing.py, progress): (key, label, ✅ when, if ⬜ what to do).
+STEPS = [
+    ("step1_clean", "1 Data clean",
+     "No line for the project in Odoo › Invoicing Dashboards 02 / 03 / 04, and no Jira card with time but no Epic.",
+     "Fix in Jira / Odoo — see “How to fix” under Details (How-to step 1)."),
+    ("step23_hours", "2–3 Hours checked",
+     "The month's hours are all on an SO item, on the right kind of item (functional AM/BA/PM vs technical DEV/ARCH), "
+     "and Odoo can invoice all the hours that are not yet invoiced.",
+     "Project › Timesheet › filter To invoice › group by Sales Order Item › Mass edit (How-to steps 2–3)."),
+    ("step45_draft", "4–5 Draft invoice",
+     "An invoice (draft or posted) exists on the project's orders, created since the start of the invoicing cycle.",
+     "On each SO: create the invoice, period year to date, fields as in “Invoice fields” above (How-to steps 4–5)."),
+    ("step6_report", "6 Hours report attached",
+     "Every invoice of the cycle has an hours report PDF attached in Odoo.",
+     "Print Timesheet Entries - External / Hours Block report (or ask Claude for the hours report) and attach it "
+     "to the invoice (How-to step 6)."),
+    ("step7_activity", "7 Admin notified",
+     "Every draft invoice has an activity “Validate/Send Invoice” assigned to Leila (or the invoice is already posted).",
+     "On the invoice: Schedule activity › Validate/Send Invoice › assigned to Leila (How-to step 7)."),
+]
+
+
 def _checklist(pr):
-    items = [("step1_clean", "1 Clean"), ("step23_hours", "2–3 Hours"), ("step45_draft", "4–5 Draft"),
-             ("step6_report", "6 Report"), ("step7_activity", "7 Activity")]
-    return "<p>" + " · ".join(f"{'✅' if pr.get(k) else '⬜'} {esc(t)}" for k, t in items) + "</p>"
+    return "<p>" + "<br>".join(f"{'✅' if pr.get(k) else '⬜'} {esc(t)}" for k, t, _, _ in STEPS) + "</p>"
+
+
+def _legend():
+    head = "".join(f"<th><p><strong>{h}</strong></p></th>" for h in ("Checklist step", "✅ means (checked automatically)",
+                                                                    "⬜ → what to do"))
+    rows = "".join(f"<tr><td><p><strong>{esc(t)}</strong></p></td><td><p>{esc(ok)}</p></td><td><p>{esc(todo)}</p></td></tr>"
+                   for _, t, ok, todo in STEPS)
+    status_line = ("<p><strong>Status</strong>: "
+                   f"{status('red')} something to correct in Odoo / Jira before invoicing · "
+                   f"{status('yellow')} a point to verify, invoicing possible · "
+                   f"{status('green')} nothing to fix, amount ready to invoice · "
+                   f"{status('idle')} nothing to invoice.</p>")
+    note = ("<p style=\"font-size: 14px\">The ticks and statuses are recomputed from Odoo and Jira at every run of "
+            "<code>invoicing_day</code>: a tick added by hand is overwritten. Write remarks in the "
+            "<strong>Comments</strong> column — it is kept from run to run and month to month.</p>")
+    return "\n".join(["<h3>How to read this table</h3>", status_line,
+                      f"<table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>", note])
 
 
 def _to_invoice_cell(r):
@@ -350,6 +388,7 @@ def build_body(fig, comments=None):
                "<li>Activity <em>Validate/Send Invoice</em> assigned to Leila: “Hello, The invoice is ready to be sent "
                "with the hour details attached. Thank you!”</li></ul>")
     out.append("<h2>Projects</h2>")
+    out.append(_legend())
     out.append(_table(table_rows, comments))
     if idle:
         out.append(f"<p style=\"font-size: 14px\">Nothing to invoice and nothing to fix: {esc(', '.join(idle))}.</p>")
