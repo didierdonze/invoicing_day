@@ -66,6 +66,8 @@ def cmd_hours_report(args):
     client = Odoo()
     try:
         entry = project_entry(client, args.project, args.so)
+        if args.lang:                      # default: the customer's language in Odoo (as the invoice)
+            entry["language"] = args.lang
         facts = fh.fetch_hours(client, entry, invoice=args.invoice, date_from=args.date_from,
                                date_to=args.date_to, slug=entry["slug"])
     except fh.HoursRefusal as e:
@@ -236,6 +238,8 @@ def build_parser():
     hrr.add_argument("--to", dest="date_to", type=date.fromisoformat, metavar="YYYY-MM-DD")
     hrr.add_argument("--so", nargs="*", help="narrow to these sale orders of the project")
     hrr.add_argument("--html-only", action="store_true", help="write HTML + JSON, skip the PDF")
+    hrr.add_argument("--lang", choices=["fr", "de", "en"],
+                     help="report language (default: the customer's language in Odoo, like the invoice)")
     hrr.add_argument("--out-dir", help="output folder (default: runs/AAAA-MM/hours/<project>/)")
     hrr.set_defaults(func=cmd_hours_report)
     return ap

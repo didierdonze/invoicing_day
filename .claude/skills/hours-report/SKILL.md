@@ -43,6 +43,8 @@ registry — `--so` can only narrow them; files go to `runs/AAAA-MM/hours/<proje
      `2026-09-01 → 2026-09-30` (dd.mm.yyyy when you show them) and confirm them. A period ending today or later
      is accepted, but hours may still be booked — mention it.
    - If the project has several orders and the PM wants one report per order, add `--so SO-…`.
+   - Language: by default the customer's language in Odoo (the invoice's language). If the PM wants
+     another one, add `--lang fr|de|en` — never switch it on your own.
 3. **PAUSE** until the mode and the reference (invoice number/id, or both dates) are explicit and confirmed.
 
 ## STEP 2 — Generate
