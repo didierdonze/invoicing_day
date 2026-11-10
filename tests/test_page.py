@@ -44,6 +44,7 @@ class PageTest(unittest.TestCase):
         from invoicing_day.page import STEPS
         body = build_body(figures())
         self.assertIn("How to read this table", body)
+        self.assertIn("Odoo-only", body)                                # no Jira link ≠ unclean (Didier 2026-11-10)
         for _, label, _, _ in STEPS:
             self.assertGreaterEqual(body.count(label), 2)              # legend + at least one row
 

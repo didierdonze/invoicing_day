@@ -400,7 +400,10 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
 
     # Step 1 — Invoicing Dashboards 02/03/04 + Jira Check Epic
     if not_in_jira:
-        flags.append(flag("red", "D02_NOT_IN_JIRA", "project not linked with Jira (dashboard 02)"))
+        # Didier 2026-11-10: a project with no Jira link (Connector tab empty = dashboard 02) is an
+        # Odoo-only project by design — not an error, and it does not uncheck "1 Data clean".
+        flags.append(flag("info", "ODOO_ONLY", "no Jira link (Connector tab empty): Odoo-only project, "
+                                               "dashboard 02 and the Jira checks do not apply"))
     if d03:
         flags.append(flag("red", "D03_TASK_NO_SO", f"{len(d03)} task(s) not linked to an SO line (dashboard 03)"))
     if d04:
@@ -579,7 +582,7 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
                      "currency": _name(m.get("currency_id")) or "CHF",
                      "report_attached": bool(report), "admin_activity": bool(leila),
                      "link": client.link("account.move", m["id"])})
-    step1 = not any(f["code"] in ("D02_NOT_IN_JIRA", "D03_TASK_NO_SO", "D04_TS_NO_TASK", "JIRA_NO_EPIC") for f in flags)
+    step1 = not any(f["code"] in ("D03_TASK_NO_SO", "D04_TS_NO_TASK", "JIRA_NO_EPIC") for f in flags)
     step23 = not any(f["code"] in ("TS_NO_SO_ITEM", "ITEM_CATEGORY", "HOURS_NOT_INVOICEABLE") for f in flags)
     invs = [x for x in prog if x["kind"] == "out_invoice"]
     progress = {"step1_clean": step1, "step23_hours": step23, "step45_draft": bool(invs),

@@ -170,7 +170,8 @@ def _has_text(fragment):
 # at every run (invoicing.py, progress): (key, label, ✅ when, if ⬜ what to do).
 STEPS = [
     ("step1_clean", "1 Data clean",
-     "No line for the project in Odoo › Invoicing Dashboards 02 / 03 / 04, and no Jira card with time but no Epic.",
+     "No line for the project in Odoo › Invoicing Dashboards 03 / 04, and no Jira card with time but no Epic. "
+     "A project without Jira link (Connector tab empty) is Odoo-only: dashboard 02 does not apply to it.",
      "Fix in Jira / Odoo — see “How to fix” under Details (How-to step 1)."),
     ("step23_hours", "2–3 Hours checked",
      "The month's hours are all on an SO item, on the right kind of item (functional AM/BA/PM vs technical DEV/ARCH), "
@@ -285,7 +286,7 @@ def _details(r, odoo_url, dashboards):
     c = r["controls"]
     parts = []
     if r["flags"]:
-        shown = [f for f in r["flags"] if f["level"] != "info" or f["code"] == "STALE_TO_INVOICE"]
+        shown = [f for f in r["flags"] if f["level"] != "info" or f["code"] in ("STALE_TO_INVOICE", "ODOO_ONLY")]
         if shown:
             parts.append("<ul>" + "".join(f"<li>{LEVEL_ICON[f['level']]} {esc(f['msg'])}</li>" for f in shown) + "</ul>")
     noted = [it for it in r["proposal"] if it.get("note") and it["kind"] == "tm"]
@@ -400,12 +401,13 @@ def build_body(fig, comments=None):
                "<li>04 - TS lines without tasks: add the Epic in the Jira card, then select the lines › Action › "
                "<em>Refresh workload from Jira</em>; or Action › <em>Mass edit (Timesheets)</em> › Task + Sales Order Item "
                "(or Maintenance project + Task).</li>"
-               "<li>02 / 03: link the project to Jira, link the task to an SO line.</li>"
+               "<li>03: link the task to an SO line. (02, project without Jira link: fine for an Odoo-only project.)</li>"
                "<li>Hours without SO item or on the wrong item (functional AM/BA/PM vs technical DEV/ARCH): "
                "project › Timesheet › filter To invoice › group by Sales Order Item › <em>Mass edit</em>.</li>"
                "<li>Rounded hours: round down on the TS (internal); a commercial gesture is a rebate line on the invoice.</li>"
                "</ul><p>Per-item breakdown of each proposal: <code>runs/AAAA-MM/report.md</code> and "
                "<code>figures.json</code> on Didier's machine.</p></div>")
     out += [_details(r, fig['links']['odoo'], fig['meta'].get('dashboards') or {}) for r in table_rows
-            if any(f['level'] != 'info' or f['code'] == 'STALE_TO_INVOICE' for f in r['flags']) or r['progress']['invoices']]
+            if any(f['level'] != 'info' or f['code'] in ('STALE_TO_INVOICE', 'ODOO_ONLY') for f in r['flags'])
+            or r['progress']['invoices']]
     return "\n".join(out) + "\n"          # one block per line: readable in chunks, < 2 k chars per line

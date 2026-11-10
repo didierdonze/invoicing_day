@@ -24,7 +24,7 @@ panels, status lozenges, `<details>`, `data-background` sur les cellules). Rien 
 
 | Statut | Lozenge | Fond | Quand |
 |---|---|---|---|
-| red | TO FIX | `#FFEBE6` | dashboards 02/03/04, carte Jira sans epic, écart Jira ≠ Odoo, bloc d'heures dépassé, SO facturé au-delà du montant vendu |
+| red | TO FIX | `#FFEBE6` | dashboards 03/04 (02 = projet sans lien Jira = Odoo seulement, info), carte Jira sans epic, écart Jira ≠ Odoo, bloc d'heures dépassé, SO facturé au-delà du montant vendu |
 | yellow | TO CHECK | `#FFFAE6` | heures du mois sans poste de SO, profil fonctionnel/technique sur le mauvais poste, heures non liées à une facture mais rien à facturer sur le SO, Tempo non approuvé, facture en retard, bloc ≥ 90 %, SO livré au-delà du montant (à mettre à jour) |
 | green | READY | `#E3FCEF` | quelque chose à facturer, aucun signal |
 | idle | NOTHING | — | rien à facturer, aucun signal |
