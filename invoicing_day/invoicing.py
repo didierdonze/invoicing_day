@@ -33,6 +33,11 @@ SO_FIELDS = ["id", "name", "state", "date_order", "client_order_ref", "partner_i
 
 # ---------------------------------------------------------------- helpers
 
+def jira_keys(raw):
+    """'FMEL, BIZ' → ['FMEL', 'BIZ']."""
+    return [k.strip().upper() for k in re.split(r"[,;\s]+", raw or "") if k.strip()]
+
+
 def month_bounds(month):
     y, m = map(int, month.split("-"))
     first = date(y, m, 1)
@@ -280,7 +285,18 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
         jira_state["reason"] = "disabled (--no-jira)"
     if not jira_state["available"]:
         meta["skipped"].append(f"Jira controls skipped: {jira_state['reason']}")
-    keys = {pid: (pdet.get(pid, {}).get("jira_key") or "").strip() or None for pid in pids}
+    # project.project.jira_key may hold several keys ("FMEL, BIZ"). A key used by several Grammont
+    # projects (e.g. BIZ) cannot be attributed to one of them: it is left out and reported.
+    all_keys = {pid: jira_keys(pdet.get(pid, {}).get("jira_key")) for pid in pids}
+    usage = defaultdict(list)
+    for pid, ks in all_keys.items():
+        for k in ks:
+            usage[k].append(pid)
+    shared = sorted(k for k, ps in usage.items() if len(ps) > 1)
+    keys = {pid: [k for k in ks if k not in shared] for pid, ks in all_keys.items()}
+    if shared and jira_state["available"]:
+        meta["skipped"].append("Jira key(s) shared by several projects, not checked: "
+                               + ", ".join(f"{k} ({len(usage[k])} projects)" for k in shared))
     check_epic, jira_month = {}, {}
     if jira_state["available"]:
         try:
@@ -299,7 +315,9 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
         rows.append(_row(client, p, pdet.get(pid, {}), ti_by_p[pid], act.get(pid), tempo.get(pid, 0.0),
                          proj_orders.get(pid, []), orders, sols, prods, hpu, remaining, jobs, moves, cyc,
                          cyc_lines, atts, acts, pid in d02, d03.get(pid, []), d04.get(pid, []),
-                         keys.get(pid), check_epic.get(pid), jira_month.get(pid), jira_state, first, last, today,
+                         ", ".join(all_keys.get(pid) or []) or None, check_epic.get(pid) if keys.get(pid) else None,
+                         jira_month.get(pid), jira_state if keys.get(pid) or not all_keys.get(pid) else
+                         {"available": False, "reason": "shared key only"}, first, last, today,
                          active_orders, month_lines, no_so_month.get(pid, {})))
     order = {"red": 0, "yellow": 1, "green": 2, "idle": 3}
     rows.sort(key=lambda r: (order[r["status"]], r["project"].lower()))
@@ -340,7 +358,7 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
 
 def _jira_controls(client, jira, keys, first, last):
     """Check Epic (How-to step 1A) + Jira vs Odoo hours of the month, per project."""
-    by_key = {k: pid for pid, k in keys.items() if k}
+    by_key = {k: pid for pid, ks in keys.items() for k in ks}
     if not by_key:
         return {}, {}
     check = defaultdict(list)
@@ -353,15 +371,17 @@ def _jira_controls(client, jira, keys, first, last):
     a = int(datetime(first.year, first.month, first.day, tzinfo=TZ).timestamp() * 1000)
     b = int(datetime.combine(last + timedelta(days=1), datetime.min.time(), TZ).timestamp() * 1000)
     month = {}
-    for k, pid in by_key.items():
-        jh = {}
-        jql = (f'project = "{k}" AND worklogDate >= "{first.isoformat()}" AND worklogDate <= "{last.isoformat()}"')
-        for i in jira.search(jql, fields=("summary",)):
-            jh[i["key"]] = jira.worklog_seconds(i["key"], a, b) / 3600
-        oh = defaultdict(float)
-        for l in client.search_read(TS, [["jira_issue_key", "=like", f"{k}-%"], ["date", ">=", first.isoformat()],
-                                         ["date", "<=", last.isoformat()]], ["jira_issue_key", "unit_amount"]):
-            oh[l["jira_issue_key"]] += l["unit_amount"] or 0.0
+    for pid, ks in keys.items():
+        if not ks:
+            continue
+        jh, oh = {}, defaultdict(float)
+        for k in ks:
+            jql = (f'project = "{k}" AND worklogDate >= "{first.isoformat()}" AND worklogDate <= "{last.isoformat()}"')
+            for i in jira.search(jql, fields=("summary",)):
+                jh[i["key"]] = jira.worklog_seconds(i["key"], a, b) / 3600
+            for l in client.search_read(TS, [["jira_issue_key", "=like", f"{k}-%"], ["date", ">=", first.isoformat()],
+                                             ["date", "<=", last.isoformat()]], ["jira_issue_key", "unit_amount"]):
+                oh[l["jira_issue_key"]] += l["unit_amount"] or 0.0
         diffs = []
         for issue in sorted(set(jh) | set(oh), key=lambda s: (len(s), s)):
             j, o = jh.get(issue, 0.0), oh.get(issue, 0.0)

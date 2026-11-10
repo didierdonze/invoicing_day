@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 
 from invoicing_day import rules
-from invoicing_day.invoicing import _months_back, action_domain, month_bounds
+from invoicing_day.invoicing import _months_back, action_domain, jira_keys, month_bounds
 from invoicing_day.odoo import READ_ONLY, Odoo, OdooError
 from tests.fakes import FakeOdoo
 
@@ -26,6 +26,11 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(month_bounds("2026-10"), (date(2026, 10, 1), date(2026, 10, 31)))
         self.assertEqual(month_bounds("2026-12"), (date(2026, 12, 1), date(2026, 12, 31)))
         self.assertEqual(month_bounds("2028-02")[1], date(2028, 2, 29))
+
+    def test_jira_keys(self):
+        self.assertEqual(jira_keys("FMEL, BIZ"), ["FMEL", "BIZ"])
+        self.assertEqual(jira_keys("BSIDM"), ["BSIDM"])
+        self.assertEqual(jira_keys(False), [])
 
     def test_months_back(self):
         self.assertEqual(_months_back(date(2026, 2, 1), 2), date(2025, 12, 1))
