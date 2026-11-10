@@ -171,7 +171,8 @@ def _has_text(fragment):
 # at every run (invoicing.py, progress): (key, label, ✅ when, if ⬜ what to do).
 STEPS = [
     ("step1_clean", "1 Data clean",
-     "No line for the project in Odoo › Invoicing Dashboards 03 / 04, and no Jira card with time but no Epic. "
+     "No line for the project in Odoo › Invoicing Dashboards 03 / 04, and no Jira card with time but no Epic — "
+     "unless its hours are already on a task and SO item in Odoo (e.g. moved to Maintenance). "
      "A project without Jira link (Connector tab empty) is Odoo-only: dashboard 02 does not apply to it.",
      "Follow the ↳ links under the box: the Jira cards, Odoo tasks or timesheet lines to correct "
      "(fixes in “How to fix” under Details, How-to step 1)."),
@@ -197,6 +198,7 @@ def _activity_to(pr):
     return sorted({u for i in pr.get("invoices") or [] for u in i.get("activity_to") or []})
 
 
+SHOWN_INFO = ("STALE_TO_INVOICE", "ODOO_ONLY", "JIRA_NO_EPIC_PLACED")   # info flags worth a line under Details
 HINTS = 3          # direct links per kind under an unticked step; the rest via the dashboard / a Jira search
 
 
@@ -223,7 +225,7 @@ def _dash(ctx, k, text):
 def _step1_hints(r, ctx):
     """↳ lines under an unticked “1 Data clean”: what to correct, with direct links."""
     c, out = r["controls"], []
-    ce = c.get("check_epic") or []
+    ce = [i for i in c.get("check_epic") or [] if i.get("odoo") != "placed"]
     if ce:
         more = f" · {_jira_search(ctx, [i['key'] for i in ce], f'all {len(ce)}')}" if len(ce) > HINTS else ""
         out.append("Jira, add an Epic: " + ", ".join(a(i["link"], i["key"]) for i in ce[:HINTS]) + more)
@@ -351,7 +353,7 @@ def _details(r, odoo_url, dashboards):
     c = r["controls"]
     parts = []
     if r["flags"]:
-        shown = [f for f in r["flags"] if f["level"] != "info" or f["code"] in ("STALE_TO_INVOICE", "ODOO_ONLY")]
+        shown = [f for f in r["flags"] if f["level"] != "info" or f["code"] in SHOWN_INFO]
         if shown:
             parts.append("<ul>" + "".join(f"<li>{LEVEL_ICON[f['level']]} {esc(f['msg'])}</li>" for f in shown) + "</ul>")
     noted = [it for it in r["proposal"] if it.get("note") and it["kind"] == "tm"]
@@ -371,8 +373,8 @@ def _details(r, odoo_url, dashboards):
     if c.get("d03_tasks_no_so"):
         parts.append(f"<p><strong>03 - Tasks not linked to a SO line</strong>: {c['d03_count']} — "
                      + esc(_examples(c["d03_tasks_no_so"], lambda t: t["name"])) + dash_link("03") + "</p>")
-    if c.get("check_epic"):
-        ce = c["check_epic"]
+    ce = [i for i in c.get("check_epic") or [] if i.get("odoo") != "placed"]
+    if ce:
         parts.append(f"<p><strong>Jira cards with time and no Epic</strong>: {len(ce)} — "
                      + ", ".join(a(i["link"], i["key"]) for i in ce[:10]) + (f" … (+{len(ce) - 10})" if len(ce) > 10 else "") + "</p>")
     jv = c.get("jira_vs_odoo")
@@ -476,6 +478,6 @@ def build_body(fig, comments=None):
                "</ul><p>Per-item breakdown of each proposal: <code>runs/AAAA-MM/report.md</code> and "
                "<code>figures.json</code> on Didier's machine.</p></div>")
     out += [_details(r, fig['links']['odoo'], fig['meta'].get('dashboards') or {}) for r in table_rows
-            if any(f['level'] != 'info' or f['code'] in ('STALE_TO_INVOICE', 'ODOO_ONLY') for f in r['flags'])
+            if any(f['level'] != 'info' or f['code'] in SHOWN_INFO for f in r['flags'])
             or r['progress']['invoices']]
     return "\n".join(out) + "\n"          # one block per line: readable in chunks, < 2 k chars per line

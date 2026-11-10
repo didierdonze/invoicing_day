@@ -30,6 +30,13 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(activity_assignees(acts), ["Admin One", "PM Two", "unassigned"])
         self.assertEqual(activity_assignees([]), [])
 
+    def test_card_state(self):
+        from invoicing_day.invoicing import card_state
+        self.assertEqual(card_state([]), "absent")
+        self.assertEqual(card_state([{"task_id": [1, "Maint"], "so_line": [2, "SO"]}]), "placed")
+        self.assertEqual(card_state([{"task_id": [1, "Maint"], "so_line": [2, "SO"]},
+                                     {"task_id": False, "so_line": False}]), "unplaced")
+
     def test_d04_cards_grouped_biggest_first(self):
         from invoicing_day.invoicing import d04_cards
         lines = [{"jira": "A-1", "hours": 0.5}, {"jira": "A-2", "hours": 2.0}, {"jira": "A-1", "hours": 0.25},

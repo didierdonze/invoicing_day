@@ -60,6 +60,14 @@ def activity_assignees(activities):
     return sorted({_name(a.get("user_id")) or "unassigned" for a in activities})
 
 
+def card_state(lines):
+    """A Jira card without Epic, seen from Odoo: "placed" when all its timesheet lines are on a task AND an SO item
+    (How-to fix #2, e.g. moved to Maintenance — nothing left to fix), "unplaced" otherwise, "absent" if not in Odoo."""
+    if not lines:
+        return "absent"
+    return "placed" if all(l.get("task_id") and l.get("so_line") for l in lines) else "unplaced"
+
+
 def d04_cards(lines):
     """Dashboard 04 lines grouped by Jira card (None = no card): what to fix, biggest first."""
     by = defaultdict(lambda: {"lines": 0, "hours": 0.0})
@@ -318,6 +326,14 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
     if jira_state["available"]:
         try:
             check_epic, jira_month = _jira_controls(client, jira, keys, first, last)
+            ce_keys = sorted({i["key"] for items in check_epic.values() for i in items})
+            by_card = defaultdict(list)
+            for l in (client.search_read(TS, [["jira_issue_key", "in", ce_keys]], ["jira_issue_key", "task_id", "so_line"])
+                      if ce_keys else []):
+                by_card[l["jira_issue_key"]].append(l)
+            for items in check_epic.values():
+                for i in items:
+                    i["odoo"] = card_state(by_card.get(i["key"]))
         except Exception as e:                                  # noqa: BLE001 — reported, never fatal
             jira_state.update(available=False, reason=str(e))
             meta["skipped"].append(f"Jira controls failed: {e}")
@@ -426,8 +442,15 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
     if d04:
         flags.append(flag("red", "D04_TS_NO_TASK", f"{len(d04)} TS line(s) without task, "
                                                    f"{r2(sum(l['hours'] or 0 for l in d04))} h (dashboard 04)"))
-    if check_epic:
-        flags.append(flag("red", "JIRA_NO_EPIC", f"{len(check_epic)} Jira card(s) with time and no Epic (Check Epic filter)"))
+    epic_fix = [i for i in check_epic or [] if i.get("odoo") != "placed"]
+    epic_ok = [i for i in check_epic or [] if i.get("odoo") == "placed"]
+    if epic_fix:
+        flags.append(flag("red", "JIRA_NO_EPIC", f"{len(epic_fix)} Jira card(s) with time and no Epic (Check Epic filter)"))
+    if epic_ok:                       # Didier 2026-11-10: already on a task + SO item in Odoo → nothing to fix
+        flags.append(flag("info", "JIRA_NO_EPIC_PLACED",
+                          f"{len(epic_ok)} Jira card(s) without Epic but already on a task and SO item in Odoo "
+                          f"(e.g. Maintenance), nothing to fix: {', '.join(i['key'] for i in epic_ok[:5])}"
+                          + (" …" if len(epic_ok) > 5 else "")))
 
     # Steps 2–3 — To invoice, grouped by SO item
     by_line = defaultdict(lambda: {"hours": 0.0, "rounded": 0.0})

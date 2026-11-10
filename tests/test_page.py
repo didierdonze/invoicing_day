@@ -65,7 +65,9 @@ class PageTest(unittest.TestCase):
         beta["progress"] = {**beta["progress"], "step1_clean": False}
         beta["controls"] = {**beta["controls"], "d04_cards": [{"key": "BET-1", "lines": 3, "hours": 1.5}],
                             "check_epic": [{"key": f"BET-{n}", "summary": "s", "hours": 1.0,
-                                            "link": f"https://jira.example/browse/BET-{n}"} for n in range(10, 15)],
+                                            "link": f"https://jira.example/browse/BET-{n}"} for n in range(10, 15)]
+                            + [{"key": "BET-99", "summary": "s", "hours": 1.0, "odoo": "placed",
+                                "link": "https://jira.example/browse/BET-99"}],
                             "d03_count": 1, "d03_tasks_no_so": [{"id": 7, "name": "Task without SO item",
                                                                 "link": "https://odoo.example/t7"}]}
         body = build_body(fig)
@@ -75,6 +77,7 @@ class PageTest(unittest.TestCase):
         self.assertIn('<a href="https://jira.example/browse/BET-1">BET-1</a> (3)', body)
         self.assertIn('href="https://odoo.example/web#action=4418">dashboard 04</a>', body)
         self.assertIn('<a href="https://odoo.example/t7">Task without SO item</a>', body)
+        self.assertNotIn("BET-99", body)                                # already placed in Odoo → no hint
         alpha = body[body.index("<strong>alpha_odoo</strong>"):]
         self.assertNotIn("↳", alpha[:alpha.index("</tr>")])            # ticked → no hint
 
