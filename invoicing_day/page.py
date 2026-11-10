@@ -221,9 +221,9 @@ def _table(rows, comments):
     head = "".join(f'<th data-colwidth="{w}"><p><strong>{h}</strong></p></th>'
                    for w, h in zip(COLWIDTHS, ("Project", "Status", "To invoice (excl. VAT)", "Checklist (How-to steps)",
                                                "Unpaid &amp; late", "Comments")))
-    body = "".join(_row(r, comments.get(r["project"])) for r in rows)
+    body = "\n".join(_row(r, comments.get(r["project"])) for r in rows)
     return (f'<table data-layout="full-width" data-display-mode="fixed"><thead><tr>{head}</tr></thead>'
-            f"<tbody>{body}</tbody></table>")
+            f"<tbody>\n{body}\n</tbody></table>")
 
 
 def _small_table(headers, rows):
@@ -293,7 +293,7 @@ def _details(r, odoo_url, dashboards):
         parts.append("<p><strong>This cycle's invoices</strong>: " + "; ".join(
             f"{a(i['link'], i['name'])} {esc(i['state'])} {esc(money(i['amount_untaxed'], i['currency']))}"
             f" · report {'✅' if i['report_attached'] else '—'} · activity {'✅' if i['admin_activity'] else '—'}" for i in inv) + "</p>")
-    body = "".join(p for p in parts if p) or "<p>Nothing to report.</p>"
+    body = "\n".join(p for p in parts if p) or "<p>Nothing to report.</p>"
     return f"<details><summary>{esc(r['project'])} — {STATUS[r['status']][1]}</summary>{body}</details>"
 
 
@@ -369,4 +369,4 @@ def build_body(fig, comments=None):
                "<code>figures.json</code> on Didier's machine.</p></div>")
     out += [_details(r, fig['links']['odoo'], fig['meta'].get('dashboards') or {}) for r in table_rows
             if any(f['level'] != 'info' or f['code'] == 'STALE_TO_INVOICE' for f in r['flags']) or r['progress']['invoices']]
-    return "".join(out)
+    return "\n".join(out) + "\n"          # one block per line: readable in chunks, < 2 k chars per line
