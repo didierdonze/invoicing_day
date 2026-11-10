@@ -14,7 +14,7 @@ panels, status lozenges, `<details>`, `data-background` sur les cellules). Rien 
    sont recalculées à chaque run (les remarques vont dans Comments). Source unique : `STEPS` dans `page.py`.
 6. **Tableau Projects**, une ligne par projet non « idle » (ou ayant un commentaire), trié rouge → jaune → vert :
    Project (code en gras, client · PM) | Status | To invoice (total, puis une ligne par SO : montant, heures,
-   types non T&M) | Checklist (✅/⬜ une étape par ligne : 1 Data clean · 2–3 Hours checked · 4–5 Draft invoice · 6 Hours report attached · 7 Admin notified, calculée) |
+   types non T&M) | Checklist (✅/⬜ une étape par ligne : 1 Data clean · 2–3 Hours checked · 4–5 Draft invoice · 6 Hours report attached · 7 Admin notified, calculée ; sous « 1 Data clean » non coché, des lignes ↳ renvoient aux cartes Jira, tâches et lignes de timesheet à corriger ; « 7 » affiche à qui l'activité est assignée) |
    Unpaid & late | **Comments (de Didier, recopiés tels quels)**.
    Les projets « idle » (rien à facturer, rien à corriger) tiennent en une ligne sous le tableau.
 7. **Details per project** : panel « How to fix » une fois, puis un `<details>` par projet ayant un signal :
