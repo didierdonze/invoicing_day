@@ -32,6 +32,9 @@ Dashboard tableur du groupe « Invoicing day » : « SO with negative remaining 
 - Rôle du poste dans la référence interne du produit : `P_01-bs-ts_ba`, `ts_pm`, `ts_fsc`, `ts_pdir`
   (fonctionnels), `ts_dev`, `ts_arch` (techniques) ; `P_01-ts_project`, support, maintenance, voyage : sans rôle.
 - Unités : beaucoup de postes en `Days (8h)`, d'autres en `Hours`, la maintenance annuelle en `Units`.
+- Commande verrouillée : `sale.order.locked` (booléen ; Odoo 17 n'a plus d'état `done`, `state` ∈ draft, sent,
+  sale, cancel). Relevé 2026-11-10 : ~3 770 h « To invoice » (sans facture liée) dorment sur des commandes
+  verrouillées des projets Grammont, contre 5 h saisies en octobre 2026 → elles sont hors contrôles.
 - Abonnements : `sale.order.is_subscription`, `next_invoice_date`, `subscription_state` (`3_progress`),
   `recurring_monthly`.
 

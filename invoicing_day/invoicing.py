@@ -28,7 +28,7 @@ SOL_FIELDS = ["id", "order_id", "name", "product_id", "product_uom", "product_uo
               "qty_invoiced", "qty_to_invoice", "untaxed_amount_to_invoice", "price_unit", "discount",
               "qty_delivered_method", "display_type", "is_downpayment", "currency_id", "state"]
 SO_FIELDS = ["id", "name", "state", "date_order", "client_order_ref", "partner_id", "currency_id", "is_subscription",
-             "next_invoice_date", "subscription_state", "recurring_monthly", "invoice_status"]
+             "next_invoice_date", "subscription_state", "recurring_monthly", "invoice_status", "locked"]
 
 
 # ---------------------------------------------------------------- helpers
@@ -240,14 +240,17 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
     # older orders often stay "to invoice" in Odoo forever (invoiced through down payments, closed blocks).
     win = _months_back(first, rules.ACTIVE_MONTHS - 1)
     recent_lines, month_lines = set(), set()
+    month_by_p = defaultdict(dict)                  # project → {SO item: rounded hours of the month}
     for g in client.read_group(TS, [["project_id", "in", pids], ["so_line", "!=", False],
                                     ["date", ">=", win.isoformat()], ["date", "<=", last.isoformat()]],
                                ["unit_amount:sum"], ["so_line", "date:month"]):
         recent_lines.add(_id(g["so_line"]))
     for g in client.read_group(TS, [["project_id", "in", pids], ["so_line", "!=", False],
                                     ["date", ">=", first.isoformat()], ["date", "<=", last.isoformat()]],
-                               ["unit_amount:sum"], ["so_line"]):
-        month_lines.add(_id(g["so_line"]))
+                               ["unit_amount_rounded:sum"], ["project_id", "so_line"], lazy=False):
+        sl = _id(g["so_line"])
+        month_lines.add(sl)
+        month_by_p[_id(g["project_id"])][sl] = g.get("unit_amount_rounded") or 0.0
     sols = {l["id"]: l for l in client.search_read("sale.order.line", [["order_id", "in", order_ids]], SOL_FIELDS)} if order_ids else {}
     active_orders = {_id(sols[l]["order_id"]) for l in recent_lines if l in sols}
     active_orders |= {o for o, r in orders.items() if (r.get("date_order") or "")[:10] >= first.isoformat()}
@@ -351,7 +354,7 @@ def build_figures(client, month, department_id=rules.DEPARTMENT_ID, projects=Non
                          ", ".join(all_keys.get(pid) or []) or None, check_epic.get(pid) if keys.get(pid) else None,
                          jira_month.get(pid), jira_state if keys.get(pid) or not all_keys.get(pid) else
                          {"available": False, "reason": "shared key only"}, first, last, today,
-                         active_orders, month_lines, no_so_month.get(pid, {})))
+                         active_orders, month_lines, no_so_month.get(pid, {}), month_by_p.get(pid, {})))
     order = {"red": 0, "yellow": 1, "green": 2, "idle": 3}
     rows.sort(key=lambda r: (order[r["status"]], r["project"].lower()))
 
@@ -426,7 +429,7 @@ def _jira_controls(client, jira, keys, first, last):
 
 def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, remaining, jobs, moves, cyc,
          cyc_lines, atts, acts, not_in_jira, d03, d04, jira_key, check_epic, jira_month, jira_state,
-         first, last, today, active_orders, month_lines, no_so_month):
+         first, last, today, active_orders, month_lines, no_so_month, month_hours=None):
     flags = []
     pid = p["id"]
     month_name = f"{rules.MONTHS_EN[first.month - 1]} {first.year}"
@@ -464,7 +467,7 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
         by_line[sl]["hours"] += h
         by_line[sl]["rounded"] += hr
         line = sols.get(sl)
-        if line:
+        if line and not (orders.get(_id(line["order_id"])) or {}).get("locked"):
             role = rules.product_role((prods.get(_id(line.get("product_id"))) or {}).get("default_code"))
             fam = rules.role_family(role)
             job = jobs.get(_id(g.get("employee_id")))
@@ -484,9 +487,18 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
 
     # proposal + SO-level checks
     proposal, blocks, neg_remaining, stale = [], [], [], []
+    locked_h = defaultdict(float)                  # locked order → its rounded hours of the month
     for oid in order_ids:
         o = orders.get(oid)
         if not o or o["state"] not in CONFIRMED_STATES:
+            continue
+        if o.get("locked"):
+            # Didier 2026-11-10: locked orders are out of the proposal and of every SO-level check
+            # (thousands of old hours were never linked to an invoice on them). Only this month's
+            # hours on them are reported, so that none is dropped silently.
+            for sl, h in (month_hours or {}).items():
+                if sl in sols and _id(sols[sl]["order_id"]) == oid:
+                    locked_h[o["name"]] += h
             continue
         active = oid in active_orders
         ref = _u(o.get("client_order_ref")) or o["name"]
@@ -566,6 +578,11 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
         flags.append(flag("info", "STALE_TO_INVOICE", f"{len(stale)} line(s) of inactive orders still 'to invoice' in "
                                                       f"Odoo ({r2(sum(x['amount'] or 0 for x in stale))} "
                                                       f"{stale[0]['currency']}) — ignored, not in the totals"))
+    locked_h = {k: v for k, v in locked_h.items() if abs(v) > EPS}
+    if locked_h:
+        flags.append(flag("info", "LOCKED_SO_HOURS", f"{r2(sum(locked_h.values()))} h of {month_name} booked on locked "
+                                                     f"order(s) {'; '.join(sorted(locked_h))} — not checked, not in the "
+                                                     "proposal"))
     for b in blocks:
         if b["remaining"] is not None and b["remaining"] < -rules.HOURS_TOLERANCE:
             flags.append(flag("red", "BLOCK_NEGATIVE", f"{b['so']} / {b['line']}: {b['delivered']} of {b['ordered']} "
@@ -641,7 +658,9 @@ def _row(client, p, pd, ti, act, tempo_h, order_ids, orders, sols, prods, hpu, r
         "project": p["name"], "project_id": pid, "client": p.get("client") or _name(pd.get("partner_id")),
         "manager": p.get("manager"), "jira_key": jira_key, "last_activity": p.get("last_activity"),
         "status": status, "flags": flags,
-        "orders": sorted({orders[o]["name"] for o in order_ids if o in orders and orders[o]["state"] in CONFIRMED_STATES}),
+        "orders": sorted({orders[o]["name"] for o in order_ids if o in orders and orders[o]["state"] in CONFIRMED_STATES
+                          and not orders[o].get("locked")}),
+        "locked_orders": sorted({orders[o]["name"] for o in order_ids if o in orders and orders[o].get("locked")}),
         "proposal": proposal, "to_invoice": {k: r2(v) for k, v in to_inv.items()},
         "controls": {
             "d02_not_in_jira": not_in_jira, "d03_tasks_no_so": d03[:rules.DETAIL_LIMIT], "d03_count": len(d03),

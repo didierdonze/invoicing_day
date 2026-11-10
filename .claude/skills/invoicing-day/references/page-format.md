@@ -20,7 +20,9 @@ dans la colonne Comments, sans publier.
    Unpaid & late | **Comments (de Didier, recopiés tels quels)**.
    Les projets « idle » (rien à facturer, rien à corriger) tiennent en une ligne sous le tableau.
 7. **Details per project** : panel « How to fix » une fois, puis un `<details>` par projet ayant un signal :
-   messages, exemples (5 au plus) et lien vers le dashboard Odoo concerné, factures du cycle.
+   messages, exemples (5 au plus) et lien vers le dashboard Odoo concerné, factures du cycle. Infos affichées :
+   `STALE_TO_INVOICE`, `ODOO_ONLY`, `JIRA_NO_EPIC_PLACED`, `LOCKED_SO_HOURS` (heures du mois sur une commande
+   verrouillée, hors proposition).
 
 ## Statuts
 

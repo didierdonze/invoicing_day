@@ -43,6 +43,10 @@ Exit codes: 1 failure · 2 hours report REFUSED · 3 Odoo unreachable (VPN) · 4
   - **Active orders:** an SO is *active* when hours were booked on it in the last `ACTIVE_MONTHS` months, or
     when it was confirmed during the cycle. SO-level checks and non-T&M amounts only consider active orders.
     Old orders often stay "to invoice" in Odoo forever; they are reported as `STALE_TO_INVOICE`, not counted.
+  - **Locked orders** (`sale.order.locked`, Didier 2026-11-10) are out of the proposal and of every SO-level
+    check (T&M, blocks, negative remaining, stale, functional/technical). Only their hours of the month are
+    reported, as the info flag `LOCKED_SO_HOURS` (shown under Details). Unpaid invoices and this cycle's
+    invoices still cover every order of the project.
   - **Dashboard domains** (Invoicing Dashboards 01–04, CRM) are read live from the Odoo window actions and
     evaluated with `uid` and `context_today()`, so the checks follow any change Odoo makes to them.
   - **Status per project:** red > yellow > green > idle, computed from the flags.

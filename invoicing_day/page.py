@@ -198,7 +198,7 @@ def _activity_to(pr):
     return sorted({u for i in pr.get("invoices") or [] for u in i.get("activity_to") or []})
 
 
-SHOWN_INFO = ("STALE_TO_INVOICE", "ODOO_ONLY", "JIRA_NO_EPIC_PLACED")   # info flags worth a line under Details
+SHOWN_INFO = ("STALE_TO_INVOICE", "ODOO_ONLY", "JIRA_NO_EPIC_PLACED", "LOCKED_SO_HOURS")   # info flags worth a line under Details
 HINTS = 3          # direct links per kind under an unticked step; the rest via the dashboard / a Jira search
 
 

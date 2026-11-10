@@ -51,7 +51,10 @@ python3 -m invoicing_day run --month AAAA-MM --out runs/AAAA-MM/figures.json
 ```
 
 Codes de sortie : 3 = Odoo injoignable (VPN ?) · 4 = appel refusé par Odoo · 5 = configuration manquante →
-s'arrêter et le dire. **Ne jamais calculer un chiffre soi-même** : tout vient de `figures.json`. Un run
+s'arrêter et le dire. **Ne jamais calculer un chiffre soi-même** : tout vient de `figures.json`.
+Les **commandes verrouillées** (`locked`) sont hors proposition et hors contrôles de SO (décision de Didier,
+2026-11-10) : seules leurs heures du mois sont signalées (info `LOCKED_SO_HOURS`, sous Details). Les impayés et
+les factures du cycle couvrent toujours toutes les commandes. Un run
 précédent du même mois est conservé automatiquement dans `figures.prev.json`.
 
 ## 3. La page du mois existe-t-elle ?
